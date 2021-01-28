@@ -27,10 +27,14 @@ python module fengsha ! in
             real intent(in) :: u_ts0
             real intent(out) :: emis_dust
         end subroutine fengsha
-        subroutine fengsha_drag(z0,r) ! in :fengsha:fengsha.F90
+        subroutine mackinnon_drag(z0,r) ! in :fengsha:fengsha.F90
             real intent(in) :: z0
             real intent(out) :: r
-        end subroutine fengsha_drag
+        end subroutine mackinnon_drag
+        subroutine mb95_drag(z0,r) ! in :fengsha:fengsha.F90
+            real intent(in) :: z0
+            real intent(out) :: r
+        end subroutine mb95_drag
         subroutine fengsha_hflux(ust,utst,q) ! in :fengsha:fengsha.F90
             real intent(in) :: ust
             real intent(in) :: utst

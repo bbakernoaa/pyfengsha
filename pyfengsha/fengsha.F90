@@ -23,10 +23,16 @@ subroutine fengsha_albedo(rho_phy,smois,ssm,xland,ust,clay,sand,rdrag,u_ts0,emis
   real :: H
   real :: Q
   real :: ustar_albedo
-  
-  ! ! threshold values
-  ! conver=1.e-9
-  ! converi=1.e9
+!f2py intent(out) :: emis_dust
+!f2py intent(in) :: smois
+!f2py intent(in) :: ssm
+!f2py intent(in) :: xland
+!f2py intent(in) :: ust
+!f2py intent(in) :: clay
+!f2py intent(in) :: sand
+!f2py intent(in) :: rdrag
+!f2py intent(in) :: u_ts0
+!f2py intent(in) :: rho_phy
   
   ! Don't do dust over water!!!
   ilwi = 0
@@ -125,7 +131,7 @@ subroutine fengsha(rho_phy,smois,ssm,xland,ust,clay,sand,rdrag,u_ts0,emis_dust)
 
 end subroutine fengsha
 
-subroutine fengsha_drag(z0,R)
+subroutine mackinnon_drag(z0,R)
 
   IMPLICIT NONE
 
@@ -148,7 +154,34 @@ subroutine fengsha_drag(z0,R)
 
   return
 
-end subroutine fengsha_drag
+end subroutine mackinnon_drag
+
+
+subroutine mb95_drag(z0,R)
+
+  IMPLICIT NONE
+
+  real, intent(in) :: z0
+  real, intent(out) :: R
+  real, parameter :: z0s = 1.0e-04 !Surface roughness for ideal bare surface [m]
+  ! ------------------------------------------------------------------------
+  ! Function: Calculates the MacKinnon et al. 2004 Drag Partition Correction
+  !
+  !   R = 1.0 - log(z0 / z0s) / log( 0.7 * (12255./z0s) ** 0.8)
+  !
+  !--------------------------------------------------------------------------
+  ! Drag partition correction. See MacKinnon et al. (2004),
+  !     doi:10.1016/j.geomorph.2004.03.009
+  !  R = 1.0 - log(z0 / z0s) / log( 0.7 * (12255./z0s) ** 0.8)
+
+  ! Drag partition correction. See Marticorena et al. (1997),
+  !     doi:10.1029/96JD02964
+  R = 1.0 - log(z0 / z0s) / log( 0.7 * (10./z0s) ** 0.8)
+
+  return
+
+end subroutine mb95_drag
+
 
 subroutine fengsha_hflux(ust,utst, Q)
   !---------------------------------------------------------------------
