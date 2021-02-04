@@ -1,6 +1,6 @@
 subroutine fengsha_albedo(rho_phy,smois,ssm,xland,ust,clay,sand,rdrag,u_ts0,emis_dust)
   IMPLICIT NONE
-  
+
   REAL, INTENT(OUT) :: emis_dust
   REAL, INTENT(IN) :: smois         ! volumetric soil moisture m3/m3
   REAL, INTENT(IN) :: ssm           ! sediment supply map
@@ -11,10 +11,10 @@ subroutine fengsha_albedo(rho_phy,smois,ssm,xland,ust,clay,sand,rdrag,u_ts0,emis
        rdrag,      & ! drag partition (1/m)
        u_ts0,      & ! dry threshold friction velocity (m/s)
        rho_phy       ! air density [kg/m3]
-  
+
   REAL, PARAMETER :: cmb=1.0
   ! Local variables
-  
+
   integer :: ilwi
   real, parameter :: g0 = 9.81 * 100 ! gravity
   real :: kvh
@@ -33,7 +33,7 @@ subroutine fengsha_albedo(rho_phy,smois,ssm,xland,ust,clay,sand,rdrag,u_ts0,emis
 !f2py intent(in) :: rdrag
 !f2py intent(in) :: u_ts0
 !f2py intent(in) :: rho_phy
-  
+
   ! Don't do dust over water!!!
   ilwi = 0
   if (xland.eq.1) then
@@ -43,7 +43,7 @@ subroutine fengsha_albedo(rho_phy,smois,ssm,xland,ust,clay,sand,rdrag,u_ts0,emis
   if (ssm > 0) then
      ilwi = 1
   end if
-  
+
   IF (ilwi .eq. 0) THEN
      emis_dust = 0.
   ELSE
@@ -148,10 +148,6 @@ subroutine mackinnon_drag(z0,R)
   !     doi:10.1016/j.geomorph.2004.03.009
   R = 1.0 - log(z0 / z0s) / log( 0.7 * (12255./z0s) ** 0.8)
 
-  ! Drag partition correction. See Marticorena et al. (1997),
-  !     doi:10.1029/96JD02964
-  !R = 1.0 - log(z0 / z0s) / log( 0.7 * (10./z0s) ** 0.8)
-
   return
 
 end subroutine mackinnon_drag
@@ -164,18 +160,14 @@ subroutine mb95_drag(z0,R)
   real, intent(in) :: z0
   real, intent(out) :: R
   real, parameter :: z0s = 1.0e-04 !Surface roughness for ideal bare surface [m]
-  ! ------------------------------------------------------------------------
-  ! Function: Calculates the MacKinnon et al. 2004 Drag Partition Correction
-  !
-  !   R = 1.0 - log(z0 / z0s) / log( 0.7 * (12255./z0s) ** 0.8)
-  !
-  !--------------------------------------------------------------------------
+
   ! Drag partition correction. See MacKinnon et al. (2004),
   !     doi:10.1016/j.geomorph.2004.03.009
   !  R = 1.0 - log(z0 / z0s) / log( 0.7 * (12255./z0s) ** 0.8)
 
   ! Drag partition correction. See Marticorena et al. (1997),
   !     doi:10.1029/96JD02964
+
   R = 1.0 - log(z0 / z0s) / log( 0.7 * (10./z0s) ** 0.8)
 
   return
@@ -237,16 +229,10 @@ end subroutine MB95_kvh
 
 subroutine fecan_moisture_correction(vol_soil_moisture,sand,clay, H)
   !---------------------------------------------------------------------
-  ! Function: Calculates fecan soil moisture correction
-  !
-  ! formula of MB95
-  ! kvh = 10.0**(13.4*clay-6.0)
-  !
-  ! where:
-  !     kvh   = vertical to hoizontal mass flux ratio [-]
-  !     clay  = fractional clay content [-]
-  !
-  !--------------------------------------------------------------------
+  ! Function: calculates the fecan soil moisture
+  ! drylimit = 14.0*clay*clay+17.0*clay
+  ! H = sqrt(1.0 + 1.21*(gravsm-drylimit)**0.68)
+  !---------------------------------------------------------------------
   real, intent(in) :: vol_soil_moisture ! fractional clay content [-]
   real, intent(in) :: sand ! fractional sand content [-]
   real, intent(in) :: clay ! fractional clay content [-]
@@ -280,7 +266,7 @@ subroutine shao_1996_soil_moisture(w, H)
 
   ! inputs
   real, intent(in) :: w ! volumetric soil moisture [m3/m3]
-  
+
   !outputs
   real, intent(out) :: H
 
@@ -317,9 +303,9 @@ end subroutine shao_2004_soil_moisture
 subroutine fecan_dry_limit(clay,drylimit)
 
   IMPLICIT NONE
-  
+
   !Inputs
-  real, intent(in) :: clay ! fractional clay content 
+  real, intent(in) :: clay ! fractional clay content
   !outpus
   real, intent(out) :: drylimit ! fecan dry limit [kg/kg]
 
@@ -336,10 +322,10 @@ end subroutine fecan_dry_limit
 subroutine volumetric_to_gravimetric(vsoil, sandfrac, grav_soil)
 
   IMPLICIT NONE
-  
+
   ! Inputs
   real, intent(in) :: vsoil ! Volumetric Soil Moisture [m3/m3]
-  real, intent(in) :: sandfrac ! fractional Sand content 
+  real, intent(in) :: sandfrac ! fractional Sand content
   ! outputs
   real, intent(out) :: grav_soil ! gravimetric soil moisture [kg/kg]
   ! Local
@@ -360,11 +346,11 @@ end subroutine volumetric_to_gravimetric
 subroutine modified_threshold(u_ts0, H, drag, u_ts)
 
   IMPLICIT NONE
-  
+
   real, intent(in) :: u_ts0 ! dry threshold velocity
   real, intent(in) :: H ! fecan soil moisture correction
   real, intent(in) :: drag ! drag partition
-  real, intent(out) :: u_ts ! modified threshold velocity 
+  real, intent(out) :: u_ts ! modified threshold velocity
   u_ts = 0.
   u_ts = u_ts0 * H / drag
 
