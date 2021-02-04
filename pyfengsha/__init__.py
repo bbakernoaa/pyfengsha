@@ -1,4 +1,7 @@
 import fengsha as fdust
+from collections import Iterable
+import numpy as np
+import xarray as xr
 
 
 def fengsha_albedo(rhoa, volumetric_soil_moisture, ssm, land, ustar, clayfrac, sandfrac, drag_partition, dry_threshold):
@@ -84,7 +87,7 @@ def mackinnon_drag_partition(z0):
 
     Parameters
     ----------
-    z0 : float
+    z0 : float or iterable
         surface roughness
 
     Returns
@@ -93,7 +96,16 @@ def mackinnon_drag_partition(z0):
         mackinnon drag partition
 
     """
-    return fdust.mackinnon_drag(z0)
+    if isinstance(z0, Iterable):
+        func = np.vectorize(fdust.mackinnon_drag)
+        if isinstance(z0, xarray.DataArray):
+            result = xr.apply_ufunc(func, z0)
+        else:
+            result = func(z0)
+    else:
+        result = fdust.mackinnon_drag(z0)
+
+    return result
 
 
 def mb95_drag_partition(z0):
@@ -116,7 +128,16 @@ def mb95_drag_partition(z0):
         mackinnon drag partition
 
     """
-    return fdust.mb95_drag(z0)
+    if isinstance(z0, Iterable):
+        func = np.vectorize(fdust.mb95_drag)
+        if isinstance(z0, xarray.DataArray):
+            result = xr.apply_ufunc(func, z0)
+        else:
+            result = func(z0)
+    else:
+        result = fdust.mb95_drag(z0)
+
+    return result
 
 
 def draxler_hflux(ustar, threshold_velocity):
@@ -143,7 +164,16 @@ def draxler_hflux(ustar, threshold_velocity):
         Total mass emitted [g/s]
 
     """
-    return fdust.fengsha_hflux(ustar, threshold_velocity)
+    if isinstance(ustar, Iterable):
+        func = np.vectorize(fdust.fengsha_hflux)
+        if isinstance(ustar, xarray.DataArray):
+            result = xr.apply_ufunc(func, ustar, threshold_velocity)
+        else:
+            result = func(ustar, threshold_velocity)
+    else:
+        result = fdust.fengsha_hflux(ustar, threshold_velocity)
+
+    return result
 
 
 def mb95_kvh(clay):
@@ -168,7 +198,16 @@ def mb95_kvh(clay):
         MB95 Vertical to horizontal mass flux ratio
 
     """
-    return fdust.mb95_kvh(clay)
+    if isinstance(clay, Iterable):
+        func = np.vectorize(fdust.mb95_kvh)
+        if isinstance(clay, xarray.DataArray):
+            result = xr.apply_ufunc(func, clay)
+        else:
+            result = func(clay)
+    else:
+        result = fdust.mb95_kvh(clay)
+
+    return result
 
 
 def fecan_moisture_correction(volumetric_soil_moisture, sandfrac, clayfrac):
@@ -194,7 +233,16 @@ def fecan_moisture_correction(volumetric_soil_moisture, sandfrac, clayfrac):
         H : Soil moisture correction factor
 
     """
-    return fdust.fecan_moisture_correction(volumetric_soil_moisture, sandfrac, clayfrac)
+    if isinstance(clay, Iterable):
+        func = np.vectorize(fdust.fecan_moisture_correction)
+        if isinstance(clay, xarray.DataArray):
+            result = xr.apply_ufunc(func, volumetric_soil_moisture, sandfrac, clayfrac)
+        else:
+            result = func(volumetric_soil_moisture, sandfrac, clayfrac)
+    else:
+        result = fdust.fecan_moisture_correction(volumetric_soil_moisture, sandfrac, clayfrac)
+
+    return result
 
 
 def fecan_dry_limit(clayfrac):
@@ -211,7 +259,16 @@ def fecan_dry_limit(clayfrac):
         Description of returned object.
 
     """
-    return fdust.fecan_dry_limit(clayfrac)
+    if isinstance(clayfrac, Iterable):
+        func = np.vectorize(fdust.fecan_dry_limit)
+        if isinstance(clayfrac, xarray.DataArray):
+            result = xr.apply_ufunc(func, clayfrac)
+        else:
+            result = func(clayfrac)
+    else:
+        result = fdust.fecan_dry_limit(clayfrac)
+
+    return result
 
 
 def volumetric_to_gravimetric(volumetric_soil_moisture, sandfrac):
@@ -230,7 +287,16 @@ def volumetric_to_gravimetric(volumetric_soil_moisture, sandfrac):
         H : Soil moisture correction factor
 
     """
-    return fdust.volumetric_soil_moisture(volumetric_soil_moisture, sandfrac)
+    if isinstance(sandfrac, Iterable):
+        func = np.vectorize(fdust.volumetric_soil_moisture)
+        if isinstance(sandfrac, xarray.DataArray):
+            result = xr.apply_ufunc(func, volumetric_soil_moisture, sandfrac)
+        else:
+            result = func(volumetric_soil_moisture, sandfrac)
+    else:
+        result = fdust.volumetric_soil_moisture(volumetric_soil_moisture, sandfrac)
+
+    return result
 
 
 def shao_1996_soil_moisture(volumetric_soil_moisture):
@@ -247,7 +313,16 @@ def shao_1996_soil_moisture(volumetric_soil_moisture):
         H : Soil moisture correction factor
 
     """
-    return fdust.shao_1996_soil_moisture(volumetric_soil_moisture)
+    if isinstance(volumetric_soil_moisture, Iterable):
+        func = np.vectorize(fdust.shao_1996_soil_moisture)
+        if isinstance(volumetric_soil_moisture, xarray.DataArray):
+            result = xr.apply_ufunc(func, volumetric_soil_moisture)
+        else:
+            result = func(volumetric_soil_moisture)
+    else:
+        result = fdust.shao_1996_soil_moisture(volumetric_soil_moisture)
+
+    return result
 
 
 def shao_2004_soil_moisture(volumetric_soil_moisture):
@@ -264,7 +339,16 @@ def shao_2004_soil_moisture(volumetric_soil_moisture):
         Description of returned object.
 
     """
-    return fdust.shao_2004_soil_moisture(volumetric_soil_moisture)
+    if isinstance(clayfrac, Iterable):
+        func = np.vectorize(fdust.shao_2004_soil_moisture)
+        if isinstance(volumetric_soil_moisture, xarray.DataArray):
+            result = xr.apply_ufunc(func, volumetric_soil_moisture)
+        else:
+            result = func(volumetric_soil_moisture)
+    else:
+        result = fdust.shao_2004_soil_moisture(volumetric_soil_moisture)
+
+    return result
 
 
 def modified_threshold_velocity(dry_threshold, moisture_correction, drag_partition):
@@ -289,7 +373,16 @@ def modified_threshold_velocity(dry_threshold, moisture_correction, drag_partiti
         modified threshold friction velocity
 
     """
-    return fdust.modified_threshold(dry_threshold, moisture_correction, drag_partition)
+    if isinstance(dry_threshold, Iterable):
+        func = np.vectorize(fdust.modified_threshold)
+        if isinstance(volumetric_soil_moisture, xarray.DataArray):
+            result = xr.apply_ufunc(func, dry_threshold, moisture_correction, drag_partition)
+        else:
+            result = func(dry_threshold, moisture_correction, drag_partition)
+    else:
+        result = fdust.modified_threshold(dry_threshold, moisture_correction, drag_partition)
+
+    return result
 
 
 def xarray_fengsha_albedo(rhoa, volumetric_soil_moisture, ssm, land, ustar, clayfrac, sandfrac, drag_partition, dry_threshold):
