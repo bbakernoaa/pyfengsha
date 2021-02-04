@@ -98,7 +98,7 @@ def mackinnon_drag_partition(z0):
     """
     if isinstance(z0, Iterable):
         func = np.vectorize(fdust.mackinnon_drag)
-        if isinstance(z0, xarray.DataArray):
+        if isinstance(z0, xr.DataArray):
             result = xr.apply_ufunc(func, z0)
         else:
             result = func(z0)
@@ -130,7 +130,7 @@ def mb95_drag_partition(z0):
     """
     if isinstance(z0, Iterable):
         func = np.vectorize(fdust.mb95_drag)
-        if isinstance(z0, xarray.DataArray):
+        if isinstance(z0, xr.DataArray):
             result = xr.apply_ufunc(func, z0)
         else:
             result = func(z0)
@@ -166,7 +166,7 @@ def draxler_hflux(ustar, threshold_velocity):
     """
     if isinstance(ustar, Iterable):
         func = np.vectorize(fdust.fengsha_hflux)
-        if isinstance(ustar, xarray.DataArray):
+        if isinstance(ustar, xr.DataArray):
             result = xr.apply_ufunc(func, ustar, threshold_velocity)
         else:
             result = func(ustar, threshold_velocity)
@@ -200,7 +200,7 @@ def mb95_kvh(clay):
     """
     if isinstance(clay, Iterable):
         func = np.vectorize(fdust.mb95_kvh)
-        if isinstance(clay, xarray.DataArray):
+        if isinstance(clay, xr.DataArray):
             result = xr.apply_ufunc(func, clay)
         else:
             result = func(clay)
@@ -235,7 +235,7 @@ def fecan_moisture_correction(volumetric_soil_moisture, sandfrac, clayfrac):
     """
     if isinstance(clay, Iterable):
         func = np.vectorize(fdust.fecan_moisture_correction)
-        if isinstance(clay, xarray.DataArray):
+        if isinstance(clay, xr.DataArray):
             result = xr.apply_ufunc(func, volumetric_soil_moisture, sandfrac, clayfrac)
         else:
             result = func(volumetric_soil_moisture, sandfrac, clayfrac)
@@ -261,7 +261,7 @@ def fecan_dry_limit(clayfrac):
     """
     if isinstance(clayfrac, Iterable):
         func = np.vectorize(fdust.fecan_dry_limit)
-        if isinstance(clayfrac, xarray.DataArray):
+        if isinstance(clayfrac, xr.DataArray):
             result = xr.apply_ufunc(func, clayfrac)
         else:
             result = func(clayfrac)
@@ -289,7 +289,7 @@ def volumetric_to_gravimetric(volumetric_soil_moisture, sandfrac):
     """
     if isinstance(sandfrac, Iterable):
         func = np.vectorize(fdust.volumetric_soil_moisture)
-        if isinstance(sandfrac, xarray.DataArray):
+        if isinstance(sandfrac, xr.DataArray):
             result = xr.apply_ufunc(func, volumetric_soil_moisture, sandfrac)
         else:
             result = func(volumetric_soil_moisture, sandfrac)
@@ -315,7 +315,7 @@ def shao_1996_soil_moisture(volumetric_soil_moisture):
     """
     if isinstance(volumetric_soil_moisture, Iterable):
         func = np.vectorize(fdust.shao_1996_soil_moisture)
-        if isinstance(volumetric_soil_moisture, xarray.DataArray):
+        if isinstance(volumetric_soil_moisture, xr.DataArray):
             result = xr.apply_ufunc(func, volumetric_soil_moisture)
         else:
             result = func(volumetric_soil_moisture)
@@ -341,7 +341,7 @@ def shao_2004_soil_moisture(volumetric_soil_moisture):
     """
     if isinstance(clayfrac, Iterable):
         func = np.vectorize(fdust.shao_2004_soil_moisture)
-        if isinstance(volumetric_soil_moisture, xarray.DataArray):
+        if isinstance(volumetric_soil_moisture, xr.DataArray):
             result = xr.apply_ufunc(func, volumetric_soil_moisture)
         else:
             result = func(volumetric_soil_moisture)
@@ -375,7 +375,7 @@ def modified_threshold_velocity(dry_threshold, moisture_correction, drag_partiti
     """
     if isinstance(dry_threshold, Iterable):
         func = np.vectorize(fdust.modified_threshold)
-        if isinstance(volumetric_soil_moisture, xarray.DataArray):
+        if isinstance(volumetric_soil_moisture, xr.DataArray):
             result = xr.apply_ufunc(func, dry_threshold, moisture_correction, drag_partition)
         else:
             result = func(dry_threshold, moisture_correction, drag_partition)
