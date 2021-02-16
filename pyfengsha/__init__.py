@@ -233,9 +233,9 @@ def fecan_moisture_correction(volumetric_soil_moisture, sandfrac, clayfrac):
         H : Soil moisture correction factor
 
     """
-    if isinstance(clay, Iterable):
+    if isinstance(clayfrac, Iterable):
         func = np.vectorize(fdust.fecan_moisture_correction)
-        if isinstance(clay, xr.DataArray):
+        if isinstance(clayfrac, xr.DataArray):
             result = xr.apply_ufunc(func, volumetric_soil_moisture, sandfrac, clayfrac)
         else:
             result = func(volumetric_soil_moisture, sandfrac, clayfrac)
@@ -447,5 +447,5 @@ def xarray_fengsha(rhoa, volumetric_soil_moisture, ssm, land, ustar, clayfrac, s
     xarray.DataArray
         Total mass emitted [g/s]
     """
-    func = lambda a, b, c, d, e, f, g, h, i: pyfengsha.fengsha(a, b, c, d, e, f, g, h, i)
+    func = lambda a, b, c, d, e, f, g, h, i: fengsha(a, b, c, d, e, f, g, h, i)
     return xr.apply_ufunc(func, rhoa, volumetric_soil_moisture, ssm, land, ustar, clayfrac, sandfrac, drag_partition, dry_threshold, vectorize=True)
