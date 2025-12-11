@@ -18,17 +18,10 @@ from .fengsha import (
     DarmenovaDragPartition,
     LeungDragPartition,
     DustEmissionFENGSHA,
-    DustEmissionGOCART2G,
-    DustEmissionK14,
-    VerticalDustFluxK14
+    DustEmissionGOCART2G
 )
 
-try:
-    import xarray
-    from .xarray_interface import (
-        DustEmissionFENGSHA_xr,
-        DustEmissionGOCART2G_xr,
-        DustEmissionK14_xr
-    )
-except ImportError:
-    pass
+from .xarray_interface import (
+    DustEmissionFENGSHA_xr,
+    DustEmissionGOCART2G_xr
+)

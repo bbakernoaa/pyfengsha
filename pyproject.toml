@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyfengsha"
+version = "0.1.0"
+description = "Wrapper around the NOAA ARL FENGSHA dust emission scheme"
+authors = [
+  { name = "Barry D. Baker", email = "barry.baker@noaa.gov" },
+]
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "numba",
+    "xarray",
+    "dask",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[tool.setuptools]
+packages = ["pyfengsha"]

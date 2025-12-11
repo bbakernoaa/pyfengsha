@@ -1,17 +1,9 @@
 import unittest
 import numpy as np
 import pyfengsha
-try:
-    import xarray as xr
-    has_xarray = True
-except ImportError:
-    has_xarray = False
+import xarray as xr
 
 class TestFengshaXarray(unittest.TestCase):
-    def setUp(self):
-        if not has_xarray:
-            self.skipTest("xarray not installed")
-
     def test_DustEmissionFENGSHA_xr(self):
         ni, nj = 2, 2
         nbins = 3
@@ -96,60 +88,6 @@ class TestFengshaXarray(unittest.TestCase):
 
         self.assertEqual(emissions.shape, (ni, nj, nbins))
         self.assertTrue((emissions > 0).all())
-
-    def test_DustEmissionK14_xr(self):
-        ni, nj = 2, 2
-        coords = {'lat': np.arange(ni), 'lon': np.arange(nj)}
-
-        def make_da(val):
-            return xr.DataArray(np.full((ni, nj), val), coords=coords, dims=('lat', 'lon'))
-
-        t_soil = make_da(300.0)
-        w_top = make_da(0.1)
-        rho_air = make_da(1.2)
-        z0 = make_da(1e-4)
-        z = make_da(10.0)
-        u_z = make_da(5.0)
-        v_z = make_da(0.0)
-        ustar = make_da(0.5)
-        f_land = make_da(1.0)
-        f_snow = make_da(0.0)
-        f_src = make_da(1.0)
-        f_sand = make_da(0.8)
-        f_silt = make_da(0.1)
-        f_clay = make_da(0.1)
-        texture = make_da(1.0) # Soil type 1
-        vegetation = make_da(7.0) # Shrubland
-        gvf = make_da(0.0)
-
-        f_w = 1.0
-        f_c = 1.0
-        uts_gamma = 1.65e-4
-        UNDEF = -999.0
-        GRAV = 9.81
-        VON_KARMAN = 0.4
-        opt_clay = 1
-        Ch_DU = 1.0e-9
-
-        outputs = pyfengsha.DustEmissionK14_xr(
-            t_soil, w_top, rho_air, z0, z, u_z, v_z, ustar,
-            f_land, f_snow, f_src, f_sand, f_silt, f_clay,
-            texture, vegetation, gvf,
-            f_w, f_c, uts_gamma, UNDEF, GRAV, VON_KARMAN,
-            opt_clay, Ch_DU
-        )
-
-        # Expect tuple of 7 outputs
-        self.assertEqual(len(outputs), 7)
-        emissions = outputs[0]
-        self.assertEqual(emissions.shape, (ni, nj))
-        # With provided parameters, we should get some emission
-        # z0 is small (1e-4), z0s will be small.
-        # ustar=0.5.
-
-        # Debugging info if assertion fails
-        msg = f"\nu={outputs[1].values}\nu_t={outputs[2].values}\nu_ts={outputs[3].values}\nR={outputs[4].values}\nH_w={outputs[5].values}\nf_erod={outputs[6].values}"
-        self.assertTrue((emissions > 0).all(), msg)
 
 if __name__ == '__main__':
     unittest.main()
