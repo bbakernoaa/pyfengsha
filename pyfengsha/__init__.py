@@ -22,3 +22,13 @@ from .fengsha import (
     DustEmissionK14,
     VerticalDustFluxK14
 )
+
+try:
+    import xarray
+    from .xarray_interface import (
+        DustEmissionFENGSHA_xr,
+        DustEmissionGOCART2G_xr,
+        DustEmissionK14_xr
+    )
+except ImportError:
+    pass
