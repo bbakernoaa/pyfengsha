@@ -1,18 +1,15 @@
-from numpy.distutils.core import Extension
-
-ext2 = Extension(name='fengsha',
-                 sources=['pyfengsha/fengsha.pyf', 'pyfengsha/fengsha.F90'])
+from setuptools import setup, find_packages
 
 if __name__ == "__main__":
-    from numpy.distutils.core import setup
     setup(name='pyfengsha',
           version='0.1',
-          description="Wrapper around the NOAA ARL FENGSHA dust emission scheme ",
+          description="Wrapper around the NOAA ARL FENGSHA dust emission scheme",
           author="Barry D. Baker",
-          lisense='MIT',
+          license='MIT',
           author_email="barry.baker@noaa.gov",
-          source=['pyfengsha'],
-          packages=['pyfengsha'],
-          ext_modules=[ext2],
-          install_requires=['numpy']
+          packages=find_packages(),
+          install_requires=['numpy', 'numba'],
+          extras_require={
+              'xarray': ['xarray', 'dask'],
+          }
           )
