@@ -22,6 +22,14 @@ dependencies = [
 dev = [
     "pytest",
 ]
+examples = [
+    "cfgrib",
+    "eccodes",
+    "matplotlib",
+    "cartopy",
+    "requests",
+    "ipykernel",
+]
 
 [tool.setuptools]
 packages = ["pyfengsha"]
