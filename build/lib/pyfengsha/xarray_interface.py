@@ -9,7 +9,8 @@ def DustEmissionFENGSHA_xr(fraclake: xr.DataArray, fracsnow: xr.DataArray, oro: 
                            ssm: xr.DataArray, rdrag: xr.DataArray, airdens: xr.DataArray, ustar: xr.DataArray, vegfrac: xr.DataArray, lai: xr.DataArray, uthrs: xr.DataArray,
                            alpha: float, gamma: float, kvhmax: float, grav: float, rhop: xr.DataArray, distribution: xr.DataArray,
                            drylimit_factor: float, moist_correct: float, drag_opt: int) -> xr.DataArray:
-    """Xarray wrapper for DustEmissionFENGSHA.
+    """
+    Xarray wrapper for DustEmissionFENGSHA.
 
     Args:
         fraclake: Fraction of lake coverage (lat, lon).
@@ -58,7 +59,8 @@ def DustEmissionFENGSHA_xr(fraclake: xr.DataArray, fracsnow: xr.DataArray, oro: 
     )
 
 def DustEmissionGOCART2G_xr(radius: xr.DataArray, fraclake: xr.DataArray, gwettop: xr.DataArray, oro: xr.DataArray, u10m: xr.DataArray, v10m: xr.DataArray, Ch_DU: float, du_src: xr.DataArray, grav: float) -> xr.DataArray:
-    """Xarray wrapper for DustEmissionGOCART2G.
+    """
+    Xarray wrapper for DustEmissionGOCART2G.
 
     Args:
         radius: Particle radii (bin).

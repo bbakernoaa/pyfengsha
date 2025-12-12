@@ -22,6 +22,12 @@ dependencies = [
 dev = [
     "pytest",
 ]
+docs = [
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "mkdocs-jupyter",
+]
 examples = [
     "cfgrib",
     "eccodes",
