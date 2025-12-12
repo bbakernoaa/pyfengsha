@@ -1,0 +1,25 @@
+Metadata-Version: 2.4
+Name: pyfengsha
+Version: 0.1.0
+Summary: Wrapper around the NOAA ARL FENGSHA dust emission scheme
+Author-email: "Barry D. Baker" <barry.baker@noaa.gov>
+License: MIT
+Requires-Python: >=3.11
+Requires-Dist: numpy
+Requires-Dist: numba
+Requires-Dist: xarray
+Requires-Dist: dask
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: mkdocs; extra == "docs"
+Requires-Dist: mkdocs-material; extra == "docs"
+Requires-Dist: mkdocstrings[python]; extra == "docs"
+Requires-Dist: mkdocs-jupyter; extra == "docs"
+Provides-Extra: examples
+Requires-Dist: cfgrib; extra == "examples"
+Requires-Dist: eccodes; extra == "examples"
+Requires-Dist: matplotlib; extra == "examples"
+Requires-Dist: cartopy; extra == "examples"
+Requires-Dist: requests; extra == "examples"
+Requires-Dist: ipykernel; extra == "examples"

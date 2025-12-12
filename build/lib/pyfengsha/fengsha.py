@@ -14,7 +14,8 @@ g0 = 9.81 * 100.0
 
 @jit(nopython=True)
 def volumetric_to_gravimetric(vsoil: float, sandfrac: float) -> float:
-    """Convert volumetric soil moisture to gravimetric.
+    """
+    Convert volumetric soil moisture to gravimetric.
 
     Args:
         vsoil: Volumetric Soil Moisture [m3/m3].
@@ -36,14 +37,15 @@ def volumetric_to_gravimetric(vsoil: float, sandfrac: float) -> float:
 
 @jit(nopython=True)
 def soilMoistureConvertVol2Grav(volumetricSoilMoisture: float, sandFraction: float) -> float:
-    """Convert soil moisture fraction from volumetric to gravimetric.
+    """
+    Convert soil moisture fraction from volumetric to gravimetric.
 
     Args:
         volumetricSoilMoisture: Volumetric soil moisture fraction [1].
         sandFraction: Sand fraction [1].
 
     Returns:
-        Gravimetric soil moisture scaled by 100.
+        Gravimetric soil moisture scaled by 100 (percentage?).
     """
     waterDensity = 1000.0
     particleDensity = 1700.0
@@ -55,7 +57,8 @@ def soilMoistureConvertVol2Grav(volumetricSoilMoisture: float, sandFraction: flo
 
 @jit(nopython=True)
 def fecan_dry_limit(clay: float) -> float:
-    """Calculate the Fecan dry limit.
+    """
+    Calculates the Fecan dry limit.
 
     Args:
         clay: Fractional clay content.
@@ -73,13 +76,14 @@ def fecan_dry_limit(clay: float) -> float:
 
 @jit(nopython=True)
 def fecan_moisture_correction(vol_soil_moisture: float, sand: float, clay: float, b: float = 1.0) -> float:
-    """Calculate the Fecan soil moisture correction.
+    """
+    Calculates the Fecan soil moisture correction.
 
     Args:
         vol_soil_moisture: Volumetric soil moisture [m3/m3].
         sand: Fractional sand content.
         clay: Fractional clay content.
-        b: Dry limit factor.
+        b: Dry limit factor (default 1.0).
 
     Returns:
         H (correction factor).
@@ -96,7 +100,8 @@ def fecan_moisture_correction(vol_soil_moisture: float, sand: float, clay: float
 
 @jit(nopython=True)
 def moistureCorrectionFecan(slc: float, sand: float, clay: float, b: float) -> float:
-    """Calculate GOCART version of moisture correction.
+    """
+    GOCART version of moisture correction.
 
     Args:
         slc: Liquid water content of top soil layer, volumetric fraction [1].
@@ -115,7 +120,8 @@ def moistureCorrectionFecan(slc: float, sand: float, clay: float, b: float) -> f
 
 @jit(nopython=True)
 def shao_1996_soil_moisture(w: float) -> float:
-    """Calculate Shao 1996 soil moisture function.
+    """
+    Shao 1996 soil moisture function.
 
     Args:
         w: Soil moisture parameter.
@@ -128,7 +134,8 @@ def shao_1996_soil_moisture(w: float) -> float:
 
 @jit(nopython=True)
 def shao_2004_soil_moisture(w: float) -> float:
-    """Calculate Shao 2004 soil moisture function.
+    """
+    Shao 2004 soil moisture function.
 
     Args:
         w: Soil moisture parameter.
@@ -144,7 +151,8 @@ def shao_2004_soil_moisture(w: float) -> float:
 
 @jit(nopython=True)
 def modified_threshold(u_ts0: float, H: float, drag: float) -> float:
-    """Calculate modified threshold velocity.
+    """
+    Calculate modified threshold velocity.
 
     Args:
         u_ts0: Threshold friction velocity.
@@ -159,7 +167,8 @@ def modified_threshold(u_ts0: float, H: float, drag: float) -> float:
 
 @jit(nopython=True)
 def MB95_kvh(clay: float) -> float:
-    """Calculate Marticorena and Bergametti (1995) vertical to horizontal flux ratio.
+    """
+    Marticorena and Bergametti (1995) vertical to horizontal flux ratio.
 
     Args:
         clay: Clay fraction.
@@ -175,7 +184,8 @@ def MB95_kvh(clay: float) -> float:
 
 @jit(nopython=True)
 def DustFluxV2HRatioMB95(clay_fraction: float, max_flux_ratio: float) -> float:
-    """Compute dust flux vertical to horizontal ratio (MB95).
+    """
+    Compute dust flux vertical to horizontal ratio (MB95).
 
     Args:
         clay_fraction: Fraction of clay in soil.
@@ -193,7 +203,8 @@ def DustFluxV2HRatioMB95(clay_fraction: float, max_flux_ratio: float) -> float:
 
 @jit(nopython=True)
 def fengsha_hflux(ust: float, utst: float) -> float:
-    """Calculate Horizontal Saltation Flux Q.
+    """
+    Calculates Horizontal Saltation Flux Q.
 
     Args:
         ust: Friction velocity.
@@ -207,7 +218,8 @@ def fengsha_hflux(ust: float, utst: float) -> float:
 
 @jit(nopython=True)
 def mackinnon_drag(z0: float) -> float:
-    """Calculate MacKinnon drag partition.
+    """
+    MacKinnon drag partition.
 
     Args:
         z0: Roughness length.
@@ -221,7 +233,8 @@ def mackinnon_drag(z0: float) -> float:
 
 @jit(nopython=True)
 def mb95_drag(z0: float) -> float:
-    """Calculate Marticorena and Bergametti (1995) drag partition.
+    """
+    Marticorena and Bergametti (1995) drag partition.
 
     Args:
         z0: Roughness length.
@@ -235,12 +248,13 @@ def mb95_drag(z0: float) -> float:
 
 @jit(nopython=True)
 def fengsha_albedo(rho_phy: float, smois: float, ssm: float, xland: float, ust: float, clay: float, sand: float, rdrag: float, u_ts0: float) -> float:
-    """Calculate dust emission using Fengsha albedo based logic.
+    """
+    Calculate dust emission using Fengsha albedo based logic.
 
     Args:
         rho_phy: Air density or similar physical parameter [kg/m3].
         smois: Soil moisture.
-        ssm: Surface soil moisture availability.
+        ssm: Surface soil moisture availability?
         xland: Land mask (1 for land).
         ust: Friction velocity.
         clay: Clay fraction.
@@ -278,7 +292,8 @@ def fengsha_albedo(rho_phy: float, smois: float, ssm: float, xland: float, ust: 
 
 @jit(nopython=True)
 def fengsha(rho_phy: float, smois: float, ssm: float, xland: float, ust: float, clay: float, sand: float, rdrag: float, u_ts0: float) -> float:
-    """Core Fengsha dust emission calculation.
+    """
+    Core Fengsha dust emission calculation.
 
     Args:
         rho_phy: Physical density parameter.
@@ -311,7 +326,8 @@ def fengsha(rho_phy: float, smois: float, ssm: float, xland: float, ust: float, 
 
 @jit(nopython=True)
 def DustAerosolDistributionKok(radius: np.ndarray, rLow: np.ndarray, rUp: np.ndarray) -> np.ndarray:
-    """Compute Kok's dust size aerosol distribution.
+    """
+    Compute Kok's dust size aerosol distribution.
 
     Args:
         radius: Array of bin radii.
@@ -345,10 +361,11 @@ def DustAerosolDistributionKok(radius: np.ndarray, rLow: np.ndarray, rUp: np.nda
 
 @jit(nopython=True)
 def DarmenovaDragPartition(Lc: float, vegfrac: float, thresh: float) -> float:
-    """Darmenova drag partition scheme.
+    """
+    Darmenova drag partition scheme.
 
     Args:
-        Lc: Roughness density.
+        Lc: Roughness density?
         vegfrac: Vegetation fraction.
         thresh: Threshold value.
 
@@ -398,7 +415,8 @@ def DarmenovaDragPartition(Lc: float, vegfrac: float, thresh: float) -> float:
 
 @jit(nopython=True)
 def LeungDragPartition(Lc: float, lai: float, gvf: float, thresh: float) -> float:
-    """Leung drag partition scheme.
+    """
+    Leung drag partition scheme.
 
     Args:
         Lc: Roughness density.
@@ -453,7 +471,8 @@ def DustEmissionFENGSHA(fraclake: np.ndarray, fracsnow: np.ndarray, oro: np.ndar
                         ssm: np.ndarray, rdrag: np.ndarray, airdens: np.ndarray, ustar: np.ndarray, vegfrac: np.ndarray, lai: np.ndarray, uthrs: np.ndarray,
                         alpha: float, gamma: float, kvhmax: float, grav: float, rhop: np.ndarray, distribution: np.ndarray,
                         drylimit_factor: float, moist_correct: float, drag_opt: int) -> np.ndarray:
-    """Compute dust emissions using NOAA/ARL FENGSHA model.
+    """
+    Compute dust emissions using NOAA/ARL FENGSHA model.
 
     Args:
         fraclake: Fraction of lake coverage.
@@ -554,7 +573,8 @@ def DustEmissionFENGSHA(fraclake: np.ndarray, fracsnow: np.ndarray, oro: np.ndar
 
 @jit(nopython=True)
 def DustEmissionGOCART2G(radius: np.ndarray, fraclake: np.ndarray, gwettop: np.ndarray, oro: np.ndarray, u10m: np.ndarray, v10m: np.ndarray, Ch_DU: float, du_src: np.ndarray, grav: float) -> np.ndarray:
-    """Compute dust emissions using GOCART2G scheme.
+    """
+    Computes dust emissions using GOCART2G scheme.
 
     Args:
         radius: Particle radii.
