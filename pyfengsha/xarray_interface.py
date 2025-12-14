@@ -1,13 +1,12 @@
 import xarray as xr
 from .fengsha import (
-    DustEmissionFENGSHA,
-    DustEmissionGOCART2G
+    dust_emission_fengsha,
+    dust_emission_gocart2g
 )
-import numpy as np
 
-def DustEmissionFENGSHA_xr(fraclake: xr.DataArray, fracsnow: xr.DataArray, oro: xr.DataArray, slc: xr.DataArray, clay: xr.DataArray, sand: xr.DataArray, silt: xr.DataArray,
+def DustEmissionFENGSHA_xr(fraclake: xr.DataArray, fracsnow: xr.DataArray, oro: xr.DataArray, slc: xr.DataArray, clay: xr.DataArray, sand: xr.DataArray,
                            ssm: xr.DataArray, rdrag: xr.DataArray, airdens: xr.DataArray, ustar: xr.DataArray, vegfrac: xr.DataArray, lai: xr.DataArray, uthrs: xr.DataArray,
-                           alpha: float, gamma: float, kvhmax: float, grav: float, rhop: xr.DataArray, distribution: xr.DataArray,
+                           alpha: float, gamma: float, kvhmax: float, grav: float, distribution: xr.DataArray,
                            drylimit_factor: float, moist_correct: float, drag_opt: int) -> xr.DataArray:
     """
     Xarray wrapper for DustEmissionFENGSHA.
@@ -19,7 +18,6 @@ def DustEmissionFENGSHA_xr(fraclake: xr.DataArray, fracsnow: xr.DataArray, oro: 
         slc: Soil liquid content (lat, lon).
         clay: Clay fraction (lat, lon).
         sand: Sand fraction (lat, lon).
-        silt: Silt fraction (lat, lon).
         ssm: Surface soil moisture (lat, lon).
         rdrag: Drag partition parameter (lat, lon).
         airdens: Air density (lat, lon).
@@ -31,7 +29,6 @@ def DustEmissionFENGSHA_xr(fraclake: xr.DataArray, fracsnow: xr.DataArray, oro: 
         gamma: Tuning parameter.
         kvhmax: Max KVH ratio.
         grav: Gravity acceleration.
-        rhop: Particle density per bin (bin).
         distribution: Size distribution per bin (bin).
         drylimit_factor: Dry limit factor for moisture correction.
         moist_correct: Moisture correction factor.
@@ -41,15 +38,14 @@ def DustEmissionFENGSHA_xr(fraclake: xr.DataArray, fracsnow: xr.DataArray, oro: 
         Dust emission flux (lat, lon, bin).
     """
     return xr.apply_ufunc(
-        DustEmissionFENGSHA,
-        fraclake, fracsnow, oro, slc, clay, sand, silt,
-        ssm, rdrag, airdens, ustar, vegfrac, lai, uthrs,
-        alpha, gamma, kvhmax, grav, rhop, distribution,
+        dust_emission_fengsha,
+        fraclake, fracsnow, oro, slc, clay, sand, ssm, rdrag, airdens, ustar, vegfrac, lai, uthrs,
+        alpha, gamma, kvhmax, grav, distribution,
         drylimit_factor, moist_correct, drag_opt,
         input_core_dims=[
+            ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'],
             ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'],
-            ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'],
-            [], [], [], [], ['bin'], ['bin'],
+            [], [], [], [], ['bin'],
             [], [], []
         ],
         output_core_dims=[['lat', 'lon', 'bin']],
@@ -77,7 +73,7 @@ def DustEmissionGOCART2G_xr(radius: xr.DataArray, fraclake: xr.DataArray, gwetto
         Dust emission flux (lat, lon, bin).
     """
     return xr.apply_ufunc(
-        DustEmissionGOCART2G,
+        dust_emission_gocart2g,
         radius, fraclake, gwettop, oro, u10m, v10m, Ch_DU, du_src, grav,
         input_core_dims=[
             ['bin'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'],
