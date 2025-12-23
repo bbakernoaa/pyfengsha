@@ -14,10 +14,10 @@ from .fengsha import (
     kok_aerosol_distribution,
     gocart_vol_to_grav,
     gocart_moisture_correction,
-    darmenova_drag_partition,
-    leung_drag_partition,
     dust_emission_fengsha,
-    dust_emission_gocart2g
+    dust_emission_gocart2g,
+    darmenova_drag_partition_v,
+    leung_drag_partition_v
 )
 
 from .xarray_interface import (
