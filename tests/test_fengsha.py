@@ -1,6 +1,64 @@
 import unittest
 import numpy as np
 import pyfengsha
+from numba import jit
+
+
+# The original, loop-based implementation for comparison
+@jit(nopython=True)
+def dust_emission_fengsha_original(
+    fraclake: np.ndarray, fracsnow: np.ndarray, oro: np.ndarray, slc: np.ndarray,
+    clay: np.ndarray, sand: np.ndarray, ssm: np.ndarray, rdrag: np.ndarray,
+    airdens: np.ndarray, ustar: np.ndarray, vegfrac: np.ndarray, lai: np.ndarray,
+    uthrs: np.ndarray, alpha: float, gamma: float, kvhmax: float, grav: float,
+    distribution: np.ndarray, drylimit_factor: float, moist_correct: float, drag_opt: int
+) -> np.ndarray:
+    ni, nj = fraclake.shape
+    nbins = len(distribution)
+    emissions = np.zeros((ni, nj, nbins))
+    alpha_grav = alpha / max(grav, 1.0E-10)
+
+    # Constants needed by the original function
+    LAND_MASK_VALUE = 1.0
+    VEG_THRESHOLD_FENGSHA = 0.4
+    MAX_RDRAG_FENGSHA = 0.3
+    SSM_THRESHOLD = 1.0E-02
+
+    for j in range(nj):
+        for i in range(ni):
+            if (oro[i, j] != LAND_MASK_VALUE or
+                (drag_opt == 2 and (vegfrac[i, j] < 0.0 or vegfrac[i, j] >= VEG_THRESHOLD_FENGSHA or rdrag[i, j] > MAX_RDRAG_FENGSHA)) or
+                (drag_opt == 3 and (vegfrac[i, j] < 0.0 or lai[i, j] >= VEG_THRESHOLD_FENGSHA)) or
+                (drag_opt not in [2, 3] and rdrag[i, j] < 0.0) or
+                ssm[i, j] < SSM_THRESHOLD or clay[i, j] < 0.0 or sand[i, j] < 0.0):
+                continue
+
+            fracland = max(0.0, 1.0 - fraclake[i, j]) * max(0.0, 1.0 - fracsnow[i, j])
+            kvh = pyfengsha.mb95_vertical_flux_ratio(clay[i, j], kvhmax)
+            total_emissions = alpha_grav * fracland * (ssm[i, j] ** gamma) * airdens[i, j] * kvh
+
+            if drag_opt == 1:
+                R = rdrag[i, j]
+            elif drag_opt == 2:
+                R = pyfengsha.darmenova_drag_partition(rdrag[i, j], vegfrac[i, j], VEG_THRESHOLD_FENGSHA)
+            elif drag_opt == 3:
+                R = pyfengsha.leung_drag_partition(rdrag[i, j], lai[i, j], vegfrac[i, j], VEG_THRESHOLD_FENGSHA)
+            else:
+                R = rdrag[i, j]
+
+            rustar = R * ustar[i, j]
+            smois = slc[i, j] * moist_correct
+            h = pyfengsha.gocart_moisture_correction(smois, sand[i, j], clay[i, j], drylimit_factor)
+            u_thresh = uthrs[i, j] * h
+
+            u_sum = rustar + u_thresh
+            q = max(0.0, rustar - u_thresh) * u_sum * u_sum
+
+            for n in range(nbins):
+                emissions[i, j, n] = distribution[n] * total_emissions * q
+
+    return emissions
+
 
 class TestFengsha(unittest.TestCase):
     def test_volumetric_to_gravimetric(self):
@@ -61,6 +119,71 @@ class TestFengsha(unittest.TestCase):
         # Regression test with a known-good value
         expected_emission = 1.31131889e-07
         self.assertAlmostEqual(emissions[0,0,0], expected_emission, places=12)
+
+    def test_dust_emission_fengsha_vectorization(self):
+        """
+        Verify that the vectorized `dust_emission_fengsha` function produces
+        the same output as the original, JIT-compiled loop version.
+        """
+        # --- Test Data Setup ---
+        ni, nj, nbins = 10, 15, 4
+        np.random.seed(0)  # for reproducibility
+
+        # Generate realistic random data for all input arrays
+        fraclake = np.random.uniform(0, 0.1, (ni, nj))
+        fracsnow = np.random.uniform(0, 0.2, (ni, nj))
+        oro = np.random.choice([0.0, 1.0], (ni, nj), p=[0.1, 0.9])
+        slc = np.random.uniform(0.01, 0.5, (ni, nj))
+        clay = np.random.uniform(0.05, 0.4, (ni, nj))
+        sand = np.random.uniform(0.1, 0.8, (ni, nj))
+        ssm = np.random.uniform(0.1, 1.0, (ni, nj))
+        rdrag = np.random.uniform(0.1, 0.3, (ni, nj))
+        airdens = np.random.uniform(1.1, 1.3, (ni, nj))
+        ustar = np.random.uniform(0.01, 0.8, (ni, nj))
+        vegfrac = np.random.uniform(0, 0.5, (ni, nj))
+        lai = np.random.uniform(0, 5, (ni, nj))
+        uthrs = np.random.uniform(0.1, 0.3, (ni, nj))
+        distribution = np.random.rand(nbins)
+        distribution /= np.sum(distribution)  # Normalize
+
+        # Scalar parameters
+        params = {
+            'alpha': 1.0e-5, 'gamma': 1.0, 'kvhmax': 0.0002, 'grav': 9.81,
+            'drylimit_factor': 1.0, 'moist_correct': 1.0
+        }
+
+        # --- Run for each drag option and compare ---
+        for drag_opt in [1, 2, 3]:
+            with self.subTest(drag_opt=drag_opt):
+                # Run the original, JIT-compiled loop-based version
+                emissions_original = dust_emission_fengsha_original(
+                    fraclake, fracsnow, oro, slc, clay, sand, ssm, rdrag, airdens,
+                    ustar, vegfrac, lai, uthrs, **params, distribution=distribution,
+                    drag_opt=drag_opt
+                )
+
+                # Run the new vectorized version
+                emissions_vectorized = pyfengsha.dust_emission_fengsha(
+                    fraclake, fracsnow, oro, slc, clay, sand, ssm, rdrag, airdens,
+                    ustar, vegfrac, lai, uthrs, **params, distribution=distribution,
+                    drag_opt=drag_opt
+                )
+
+                # --- Verification ---
+                # Check that the shapes are identical
+                self.assertEqual(emissions_original.shape, emissions_vectorized.shape)
+
+                # Check that the outputs are numerically very close.
+                # A small tolerance (rtol) is used to account for potential
+                # floating-point differences between the pure Python math in the
+                # Numba JIT version and the vectorized NumPy operations.
+                np.testing.assert_allclose(
+                    emissions_original,
+                    emissions_vectorized,
+                    rtol=1e-12,
+                    atol=1e-12,
+                    err_msg=f"Mismatch for drag_opt={drag_opt}"
+                )
 
     def test_dust_emission_gocart2g(self):
         ni, nj, nbins = 2, 2, 1
