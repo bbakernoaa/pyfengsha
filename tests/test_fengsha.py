@@ -199,6 +199,79 @@ class TestFengsha(unittest.TestCase):
         self.assertEqual(emissions.shape, (ni, nj, nbins))
         self.assertTrue(emissions[0,0,0] > 0)
 
+    def test_dust_emission_gocart2g_vectorization(self):
+        """
+        Verify that the vectorized `dust_emission_gocart2g` function produces
+        the same output as the original, JIT-compiled loop version.
+        """
+        # --- Original, loop-based implementation for comparison ---
+        @jit(nopython=True)
+        def dust_emission_gocart2g_original(
+            radius: np.ndarray, fraclake: np.ndarray, gwettop: np.ndarray, oro: np.ndarray,
+            u10m: np.ndarray, v10m: np.ndarray, Ch_DU: float, du_src: np.ndarray, grav: float
+        ) -> np.ndarray:
+            air_dens = 1.25
+            soil_density = 2.65 * 1000.0
+            nbins = len(radius)
+            ni, nj = u10m.shape
+            emissions = np.zeros((ni, nj, nbins))
+            LAND_MASK_VALUE = 1.0
+
+            for n in range(nbins):
+                diameter = 2.0 * radius[n]
+                u_thresh0 = 0.13 * np.sqrt(soil_density * grav * diameter / air_dens) * \
+                            np.sqrt(1.0 + 6.0e-7 / (soil_density * grav * diameter**2.5)) / \
+                            np.sqrt(1.928 * (1331.0 * (100.0 * diameter)**1.56 + 0.38)**0.092 - 1.0)
+
+                for j in range(nj):
+                    for i in range(ni):
+                        if oro[i, j] != LAND_MASK_VALUE:
+                            continue
+
+                        w10m = np.sqrt(u10m[i, j]**2 + v10m[i, j]**2)
+                        if gwettop[i, j] < 0.5:
+                            u_thresh = max(0.0, u_thresh0 * (1.2 + 0.2 * np.log10(max(1.e-3, gwettop[i, j]))))
+                            if w10m > u_thresh:
+                                emissions[i, j, n] = (1.0 - fraclake[i, j]) * w10m**2 * (w10m - u_thresh)
+
+            for j in range(nj):
+                for i in range(ni):
+                    emissions[i, j, :] *= Ch_DU * du_src[i, j]
+
+            return emissions
+
+        # --- Test Data Setup ---
+        ni, nj, nbins = 10, 15, 4
+        np.random.seed(0)
+
+        radius = np.random.uniform(1e-7, 1e-5, nbins)
+        fraclake = np.random.uniform(0, 0.1, (ni, nj))
+        gwettop = np.random.uniform(0, 0.6, (ni, nj))
+        oro = np.random.choice([0.0, 1.0], (ni, nj), p=[0.1, 0.9])
+        u10m = np.random.uniform(-10, 10, (ni, nj))
+        v10m = np.random.uniform(-10, 10, (ni, nj))
+        du_src = np.random.uniform(0.5, 1.0, (ni, nj))
+        Ch_DU = 1.0e-9
+        grav = 9.81
+
+        # --- Run both versions and compare ---
+        emissions_original = dust_emission_gocart2g_original(
+            radius, fraclake, gwettop, oro, u10m, v10m, Ch_DU, du_src, grav
+        )
+        emissions_vectorized = pyfengsha.dust_emission_gocart2g(
+            radius, fraclake, gwettop, oro, u10m, v10m, Ch_DU, du_src, grav
+        )
+
+        # --- Verification ---
+        self.assertEqual(emissions_original.shape, emissions_vectorized.shape)
+        np.testing.assert_allclose(
+            emissions_original,
+            emissions_vectorized,
+            rtol=1e-12,
+            atol=1e-12,
+            err_msg="Mismatch between original and vectorized GOCART2G implementations."
+        )
+
 class TestFengshaHelpers(unittest.TestCase):
     def test_fecan_dry_limit(self):
         self.assertAlmostEqual(pyfengsha.fecan_dry_limit(0.0), 14.0 * 1e-4**2 + 17.0 * 1e-4)

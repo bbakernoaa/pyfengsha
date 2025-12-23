@@ -456,55 +456,103 @@ def dust_emission_fengsha(
 
     return emissions
 
-@jit(nopython=True)
 def dust_emission_gocart2g(
     radius: np.ndarray, fraclake: np.ndarray, gwettop: np.ndarray, oro: np.ndarray,
     u10m: np.ndarray, v10m: np.ndarray, Ch_DU: float, du_src: np.ndarray, grav: float
 ) -> np.ndarray:
     """
-    Computes dust emissions using GOCART2G scheme.
+    Computes dust emissions using GOCART2G scheme (Vectorized).
 
-    Args:
-        radius: Particle radii.
-        fraclake: Fraction of lake coverage.
-        gwettop: Surface wetness.
-        oro: Land mask.
-        u10m: 10m u-wind component.
-        v10m: 10m v-wind component.
-        Ch_DU: Dust emission coefficient.
-        du_src: Dust source function.
-        grav: Gravity.
+    This version is fully vectorized using NumPy and does not contain explicit
+    loops over spatial dimensions, providing a significant performance
+    improvement for large arrays.
 
-    Returns:
-        Emissions array.
+    Parameters
+    ----------
+    radius: np.ndarray
+        1D array of particle radii (nbins,).
+    fraclake: np.ndarray
+        2D array of the fraction of lake coverage (ni, nj).
+    gwettop: np.ndarray
+        2D array of surface wetness (ni, nj).
+    oro: np.ndarray
+        2D array of the land/water mask (1 for land) (ni, nj).
+    u10m: np.ndarray
+        2D array of the 10m u-wind component (ni, nj).
+    v10m: np.ndarray
+        2D array of the 10m v-wind component (ni, nj).
+    Ch_DU: float
+        Dust emission coefficient.
+    du_src: np.ndarray
+        2D array of the dust source function (ni, nj).
+    grav: float
+        Gravity acceleration.
+
+    Returns
+    -------
+    np.ndarray
+        3D array of emissions of shape (ni, nj, nbins).
     """
+    # --- Pre-calculations and constants ---
     air_dens = 1.25
     soil_density = SOIL_DENSITY_GCM3 * 1000.0  # to kg/m3
-
-    nbins = len(radius)
     ni, nj = u10m.shape
-    emissions = np.zeros((ni, nj, nbins))
+    nbins = len(radius)
 
-    for n in range(nbins):
-        diameter = 2.0 * radius[n]
-        u_thresh0 = 0.13 * np.sqrt(soil_density * grav * diameter / air_dens) * \
-                    np.sqrt(1.0 + 6.0e-7 / (soil_density * grav * diameter**2.5)) / \
-                    np.sqrt(1.928 * (1331.0 * (100.0 * diameter)**1.56 + 0.38)**0.092 - 1.0)
+    # --- Vectorized threshold velocity calculation ---
+    # `diameter` has shape (nbins,)
+    diameter = 2.0 * radius
 
-        for j in range(nj):
-            for i in range(ni):
-                if oro[i, j] != LAND_MASK_VALUE:
-                    continue
+    # `u_thresh0` has shape (nbins,)
+    term1 = np.sqrt(soil_density * grav * diameter / air_dens)
+    term2 = np.sqrt(1.0 + 6.0e-7 / (soil_density * grav * diameter**2.5))
+    term3 = np.sqrt(1.928 * (1331.0 * (100.0 * diameter)**1.56 + 0.38)**0.092 - 1.0)
+    u_thresh0 = 0.13 * term1 * term2 / term3
 
-                w10m = np.sqrt(u10m[i, j]**2 + v10m[i, j]**2)
-                if gwettop[i, j] < 0.5:
-                    u_thresh = max(0.0, u_thresh0 * (1.2 + 0.2 * np.log10(max(1.e-3, gwettop[i, j]))))
-                    if w10m > u_thresh:
-                        emissions[i, j, n] = (1.0 - fraclake[i, j]) * w10m**2 * (w10m - u_thresh)
+    # --- Vectorized wind speed ---
+    # `w10m` has shape (ni, nj)
+    w10m = np.sqrt(u10m**2 + v10m**2)
 
-    # Apply scaling and source function
-    for j in range(nj):
-        for i in range(ni):
-            emissions[i, j, :] *= Ch_DU * du_src[i, j]
+    # --- Create a mask for valid grid cells ---
+    # All masks have shape (ni, nj)
+    valid_mask = (oro == LAND_MASK_VALUE) & (gwettop < 0.5)
+
+    # Initialize emissions array to zeros
+    emissions = np.zeros((ni, nj, nbins), dtype=np.float64)
+
+    # If no cells are valid, we can return early
+    if not np.any(valid_mask):
+        return emissions
+
+    # --- Perform calculations only on the valid cells ---
+    # Slice 2D arrays to get flattened 1D arrays of valid cells
+    gwettop_v = gwettop[valid_mask]
+    w10m_v = w10m[valid_mask]
+    fraclake_v = fraclake[valid_mask]
+    du_src_v = du_src[valid_mask]
+
+    # --- Vectorized threshold calculation for valid cells ---
+    # Shape broadcasting: `gwettop_v` (n_valid,) -> (n_valid, 1)
+    # `u_thresh0` (nbins,) -> (1, nbins)
+    # `u_thresh` has shape (n_valid, nbins)
+    log_gwettop = np.log10(np.maximum(1.e-3, gwettop_v))
+    u_thresh = u_thresh0[np.newaxis, :] * (1.2 + 0.2 * log_gwettop[:, np.newaxis])
+    u_thresh = np.maximum(0.0, u_thresh)
+
+    # --- Vectorized emission calculation ---
+    # Shape broadcasting: `w10m_v` (n_valid,) -> (n_valid, 1)
+    # `w10m_v` is compared against each bin's threshold in `u_thresh`
+    # `flux` has shape (n_valid, nbins)
+    flux = (w10m_v[:, np.newaxis]**2) * (w10m_v[:, np.newaxis] - u_thresh)
+
+    # Apply wind threshold mask (where w10m > u_thresh)
+    flux = np.where(w10m_v[:, np.newaxis] > u_thresh, flux, 0.0)
+
+    # Apply lake and source function scaling
+    # Broadcasting: `fraclake_v` and `du_src_v` (n_valid,) -> (n_valid, 1)
+    scaled_flux = Ch_DU * (1.0 - fraclake_v[:, np.newaxis]) * du_src_v[:, np.newaxis] * flux
+
+    # Place the calculated values back into the full-sized emissions array
+    emissions[valid_mask] = scaled_flux
 
     return emissions
