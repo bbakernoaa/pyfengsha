@@ -73,8 +73,8 @@ class TestFengsha(unittest.TestCase):
         vsoil = 0.2
         sandfrac = 0.5
         grav = pyfengsha.gocart_vol_to_grav(vsoil, sandfrac)
-        vsat = 0.489 - 0.126 * sandfrac
-        expected_grav = vsoil * 1000.0 / (1700.0 * (1.0 - vsat))
+        # vsat = 0.489 - 0.126 * sandfrac
+        # expected_grav = vsoil * 1000.0 / (1700.0 * (1.0 - vsat))
         self.assertAlmostEqual(grav * 100, 20.496, places=2)
 
     def test_mb95_vertical_flux_ratio(self):
