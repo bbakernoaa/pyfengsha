@@ -2,6 +2,11 @@ import unittest
 import numpy as np
 import pyfengsha
 from numba import jit
+from pyfengsha.fengsha import (
+    _calculate_kvh_v,
+    _calculate_moisture_correction_v,
+    _calculate_horizontal_flux_v
+)
 
 
 # The original, loop-based implementation for comparison
@@ -303,6 +308,49 @@ class TestFengshaHelpers(unittest.TestCase):
         # Vectorized calculation
         result = pyfengsha.leung_drag_partition_v(Lc, lai, gvf, thresh)
 
+        np.testing.assert_allclose(result, expected, rtol=1e-12, atol=1e-12)
+
+    def test_calculate_kvh_v(self):
+        """Verify the vectorized kvh calculation."""
+        np.random.seed(3)
+        clay = np.random.uniform(0.05, 0.4, (10, 10))
+        kvhmax = 0.0002
+        expected = np.array([pyfengsha.mb95_vertical_flux_ratio(c, kvhmax) for c in clay.flat]).reshape(clay.shape)
+        result = _calculate_kvh_v(clay, kvhmax)
+        np.testing.assert_allclose(result, expected, rtol=1e-12, atol=1e-12)
+
+    def test_calculate_moisture_correction_v(self):
+        """Verify the vectorized moisture correction calculation."""
+        np.random.seed(4)
+        ni, nj = 10, 10
+        slc = np.random.uniform(0.01, 0.5, (ni, nj))
+        sand = np.random.uniform(0.1, 0.8, (ni, nj))
+        clay = np.random.uniform(0.05, 0.4, (ni, nj))
+        drylimit_factor = 1.0
+        moist_correct = 1.0
+        expected = np.array([pyfengsha.gocart_moisture_correction(slc[i, j], sand[i, j], clay[i, j], drylimit_factor)
+                             for i in range(ni) for j in range(nj)]).reshape(ni, nj)
+        result = _calculate_moisture_correction_v(slc, sand, clay, drylimit_factor, moist_correct)
+        np.testing.assert_allclose(result, expected, rtol=1e-12, atol=1e-12)
+
+    def test_calculate_horizontal_flux_v(self):
+        """Verify the vectorized horizontal flux calculation."""
+        np.random.seed(5)
+        ni, nj = 10, 10
+        ustar = np.random.uniform(0.01, 0.8, (ni, nj))
+        uthrs = np.random.uniform(0.1, 0.3, (ni, nj))
+        R = np.random.uniform(0.1, 0.3, (ni, nj))
+        h = np.random.uniform(1.0, 1.5, (ni, nj))
+
+        expected = np.zeros((ni, nj))
+        for i in range(ni):
+            for j in range(nj):
+                rustar = R[i, j] * ustar[i, j]
+                u_thresh = uthrs[i, j] * h[i, j]
+                u_sum = rustar + u_thresh
+                expected[i, j] = max(0.0, rustar - u_thresh) * u_sum * u_sum
+
+        result = _calculate_horizontal_flux_v(ustar, uthrs, R, h)
         np.testing.assert_allclose(result, expected, rtol=1e-12, atol=1e-12)
 
 

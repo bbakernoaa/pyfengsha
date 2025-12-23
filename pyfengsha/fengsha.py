@@ -303,6 +303,34 @@ def leung_drag_partition_v(Lc: np.ndarray, lai: np.ndarray, gvf: np.ndarray, thr
     return np.where((feff >= MIN_FEFF_L) & (feff <= MAX_FEFF_L), feff, MIN_FEFF_L)
 
 
+def _calculate_kvh_v(clay: np.ndarray, kvhmax: float) -> np.ndarray:
+    """Vectorized calculation of the vertical flux ratio."""
+    kvh = np.full_like(clay, kvhmax)
+    sub_mask = clay <= 0.2
+    kvh[sub_mask] = 10.0**(13.4 * clay[sub_mask] - 6.0)
+    return kvh
+
+
+def _calculate_moisture_correction_v(slc: np.ndarray, sand: np.ndarray, clay: np.ndarray,
+                                     drylimit_factor: float, moist_correct: float) -> np.ndarray:
+    """Vectorized calculation of the GOCART moisture correction factor (h)."""
+    smois = slc * moist_correct
+    vsat = 0.489 - 0.126 * sand
+    gravimetric_soil_moisture = smois * WATER_DENSITY_GCM3 * 1000.0 / \
+        (GOCART_PARTICLE_DENSITY_GCM3 * 1000.0 * (1.0 - vsat)) * 100.0
+    fecan_dry_limit_val = drylimit_factor * clay * (FECAN_CLAY_COEFF_A * clay + FECAN_CLAY_COEFF_B)
+    correction_term = np.maximum(0.0, gravimetric_soil_moisture - fecan_dry_limit_val)
+    return np.sqrt(1.0 + 1.21 * correction_term**0.68)
+
+
+def _calculate_horizontal_flux_v(ustar: np.ndarray, uthrs: np.ndarray, R: np.ndarray, h: np.ndarray) -> np.ndarray:
+    """Vectorized calculation of the horizontal saltation flux (q)."""
+    rustar = R * ustar
+    u_thresh = uthrs * h
+    u_sum = rustar + u_thresh
+    return np.maximum(0.0, rustar - u_thresh) * u_sum * u_sum
+
+
 def dust_emission_fengsha(
     fraclake: np.ndarray, fracsnow: np.ndarray, oro: np.ndarray, slc: np.ndarray,
     clay: np.ndarray, sand: np.ndarray, ssm: np.ndarray, rdrag: np.ndarray,
@@ -387,52 +415,29 @@ def dust_emission_fengsha(
     if not np.any(valid_mask):
         return emissions
 
-    # --- Perform calculations only on the valid cells ---
-    # Slicing with the mask flattens the array, which is fine as we'll place it back later.
+    # --- Orchestration of Calculations ---
+    # All calculations are performed only on the valid grid cells.
     fracland = np.maximum(0.0, 1.0 - fraclake[valid_mask]) * \
                np.maximum(0.0, 1.0 - fracsnow[valid_mask])
 
-    # Vectorized mb95_vertical_flux_ratio
-    clay_v = clay[valid_mask]
-    kvh = np.full_like(clay_v, kvhmax)
-    sub_mask = clay_v <= 0.2
-    kvh[sub_mask] = 10.0**(13.4 * clay_v[sub_mask] - 6.0)
+    kvh = _calculate_kvh_v(clay[valid_mask], kvhmax)
 
     alpha_grav = alpha / max(grav, 1.0E-10)
     total_emissions = alpha_grav * fracland * (ssm[valid_mask] ** gamma) * airdens[valid_mask] * kvh
 
-    # --- Drag Partition Calculation (Vectorized) ---
-    rdrag_v = rdrag[valid_mask]
-    vegfrac_v = vegfrac[valid_mask]
-    lai_v = lai[valid_mask]
-
     if drag_opt == 1:
-        R = rdrag_v
+        R = rdrag[valid_mask]
     elif drag_opt == 2:
-        R = darmenova_drag_partition_v(rdrag_v, vegfrac_v, VEG_THRESHOLD_FENGSHA)
+        R = darmenova_drag_partition_v(rdrag[valid_mask], vegfrac[valid_mask], VEG_THRESHOLD_FENGSHA)
     elif drag_opt == 3:
-        R = leung_drag_partition_v(rdrag_v, lai_v, vegfrac_v, VEG_THRESHOLD_FENGSHA)
+        R = leung_drag_partition_v(rdrag[valid_mask], lai[valid_mask], vegfrac[valid_mask], VEG_THRESHOLD_FENGSHA)
     else:
-        R = rdrag_v
+        R = rdrag[valid_mask]
 
-    rustar = R * ustar[valid_mask]
+    h = _calculate_moisture_correction_v(slc[valid_mask], sand[valid_mask], clay[valid_mask],
+                                         drylimit_factor, moist_correct)
 
-    # --- Moisture Correction (Vectorized) ---
-    smois = slc[valid_mask] * moist_correct
-    sand_v = sand[valid_mask]
-    # Vectorized gocart_vol_to_grav
-    vsat = 0.489 - 0.126 * sand_v
-    gravimetric_soil_moisture = smois * WATER_DENSITY_GCM3 * 1000.0 / (GOCART_PARTICLE_DENSITY_GCM3 * 1000.0 * (1.0 - vsat)) * 100.0
-    fecan_dry_limit_val = drylimit_factor * clay_v * (FECAN_CLAY_COEFF_A * clay_v + FECAN_CLAY_COEFF_B)
-
-    correction_term = np.maximum(0.0, gravimetric_soil_moisture - fecan_dry_limit_val)
-    h = np.sqrt(1.0 + 1.21 * correction_term**0.68)
-
-    u_thresh = uthrs[valid_mask] * h
-
-    # --- Horizontal Flux Calculation (Vectorized) ---
-    u_sum = rustar + u_thresh
-    q = np.maximum(0.0, rustar - u_thresh) * u_sum * u_sum
+    q = _calculate_horizontal_flux_v(ustar[valid_mask], uthrs[valid_mask], R, h)
 
     # --- Final Emission Calculation and Broadcasting ---
     # Reshape for broadcasting: (n_valid,) -> (n_valid, 1)
