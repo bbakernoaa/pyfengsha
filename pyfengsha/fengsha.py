@@ -106,7 +106,23 @@ def fecan_moisture_correction(vol_soil_moisture: float, sand: float, clay: float
 @jit(nopython=True)
 def gocart_moisture_correction(slc: float, sand: float, clay: float, b: float) -> float:
     """
-    GOCART version of moisture correction.
+    Calculates the GOCART version of the soil moisture correction factor.
+
+    Parameters
+    ----------
+    slc : float
+        Soil liquid content.
+    sand : float
+        Sand fraction [0-1].
+    clay : float
+        Clay fraction [0-1].
+    b : float
+        A tuning factor for the dry limit calculation.
+
+    Returns
+    -------
+    float
+        The calculated moisture correction factor.
     """
     # Note: GOCART scales gravimetric moisture by 100.
     gravimetric_soil_moisture = gocart_vol_to_grav(slc, sand) * 100.0
@@ -116,25 +132,77 @@ def gocart_moisture_correction(slc: float, sand: float, clay: float, b: float) -
 
 @jit(nopython=True)
 def shao_1996_soil_moisture(w: float) -> float:
-    """Shao 1996 soil moisture function."""
+    """
+    Calculates the Shao 1996 soil moisture function.
+
+    Parameters
+    ----------
+    w : float
+        Gravimetric soil moisture [kg/kg].
+
+    Returns
+    -------
+    float
+        The calculated soil moisture factor.
+    """
     return np.exp(22.7 * w)
 
 @jit(nopython=True)
 def shao_2004_soil_moisture(w: float) -> float:
-    """Shao 2004 soil moisture function."""
+    """
+    Calculates the Shao 2004 soil moisture function.
+
+    Parameters
+    ----------
+    w : float
+        Gravimetric soil moisture [kg/kg].
+
+    Returns
+    -------
+    float
+        The calculated soil moisture factor.
+    """
     if w <= 0.03:
         return np.exp(22.7 * w)
     return np.exp(95.3 * w - 2.029)
 
 @jit(nopython=True)
 def modified_threshold_velocity(u_ts0: float, H: float, drag: float) -> float:
-    """Calculate modified threshold velocity."""
+    """
+    Calculates the modified threshold velocity.
+
+    Parameters
+    ----------
+    u_ts0 : float
+        Threshold velocity over an ideal surface.
+    H : float
+        Soil moisture correction factor.
+    drag : float
+        Drag partition factor.
+
+    Returns
+    -------
+    float
+        The modified threshold velocity.
+    """
     return u_ts0 * H / drag
 
 @jit(nopython=True)
 def mb95_vertical_flux_ratio(clay: float, max_ratio: float = 2.0E-4) -> float:
     """
-    Marticorena and Bergametti (1995) vertical to horizontal flux ratio.
+    Calculates the Marticorena and Bergametti (1995) vertical flux ratio.
+
+    Parameters
+    ----------
+    clay : float
+        Clay fraction [0-1].
+    max_ratio : float, optional
+        The maximum allowed ratio, by default 2.0E-4.
+
+    Returns
+    -------
+    float
+        The vertical to horizontal flux ratio.
     """
     if clay <= 0.2:
         return 10.0**(13.4 * clay - 6.0)
@@ -142,27 +210,82 @@ def mb95_vertical_flux_ratio(clay: float, max_ratio: float = 2.0E-4) -> float:
 
 @jit(nopython=True)
 def horizontal_saltation_flux(ust: float, utst: float) -> float:
-    """Calculates Horizontal Saltation Flux Q."""
+    """
+    Calculates the Horizontal Saltation Flux (Q).
+
+    Parameters
+    ----------
+    ust : float
+        Friction velocity.
+    utst : float
+        Modified threshold velocity.
+
+    Returns
+    -------
+    float
+        The horizontal saltation flux. Returns 0 if ust <= utst.
+    """
     if ust <= utst:
         return 0.0
     return ust * (ust * ust - utst * utst)
 
 @jit(nopython=True)
 def mackinnon_drag_partition(z0: float) -> float:
-    """MacKinnon drag partition."""
+    """
+    Calculates the MacKinnon drag partition scheme.
+
+    Parameters
+    ----------
+    z0 : float
+        Roughness length.
+
+    Returns
+    -------
+    float
+        The calculated drag partition factor.
+    """
     z0s = 1.0e-04
     return 1.0 - np.log(z0 / z0s) / np.log(0.7 * (12255.0 / z0s) ** 0.8)
 
 @jit(nopython=True)
 def mb95_drag_partition(z0: float) -> float:
-    """Marticorena and Bergametti (1995) drag partition."""
+    """
+    Calculates the Marticorena and Bergametti (1995) drag partition scheme.
+
+    Parameters
+    ----------
+    z0 : float
+        Roughness length.
+
+    Returns
+    -------
+    float
+        The calculated drag partition factor.
+    """
     z0s = 1.0e-04
     return 1.0 - np.log(z0 / z0s) / np.log(0.7 * (10.0 / z0s) ** 0.8)
 
 @jit(nopython=True)
 def kok_aerosol_distribution(radius: np.ndarray, r_low: np.ndarray, r_up: np.ndarray) -> np.ndarray:
     """
-    Compute Kok's dust size aerosol distribution.
+    Computes Kok's dust size aerosol distribution.
+
+    This function calculates the volume distribution of aerosols across a set
+    of size bins based on Kok's model.
+
+    Parameters
+    ----------
+    radius : np.ndarray
+        1D array of particle radii for each bin.
+    r_low : np.ndarray
+        1D array of the lower bound radius for each bin.
+    r_up : np.ndarray
+        1D array of the upper bound radius for each bin.
+
+    Returns
+    -------
+    np.ndarray
+        1D array of the normalized volume distribution for each bin.
     """
     median_mass_diameter = 3.4
     geom_std_dev = 3.0
@@ -170,7 +293,7 @@ def kok_aerosol_distribution(radius: np.ndarray, r_low: np.ndarray, r_up: np.nda
     factor = 1.0 / (np.sqrt(2.0) * np.log(geom_std_dev))
 
     num_bins = len(radius)
-    distribution = np.zeros(num_bins)
+    distribution = np.zeros(num_bins, dtype=np.float64)
     total_volume = 0.0
 
     for n in range(num_bins):
@@ -181,14 +304,46 @@ def kok_aerosol_distribution(radius: np.ndarray, r_low: np.ndarray, r_up: np.nda
         distribution[n] = dist_val
         total_volume += dist_val
 
-    return distribution / total_volume
+    # Avoid division by zero if total_volume is zero
+    if total_volume > 0:
+        return distribution / total_volume
+    return distribution
 
 # --- Main Emission Schemes ---
 
 @jit(nopython=True)
-def fengsha(rho_phy: float, smois: float, ssm: float, xland: float, ust: float, clay: float, sand: float, rdrag: float, u_ts0: float) -> float:
+def fengsha(
+    rho_phy: float, smois: float, ssm: float, xland: float, ust: float,
+    clay: float, sand: float, rdrag: float, u_ts0: float
+) -> float:
     """
-    Core Fengsha dust emission calculation.
+    Calculates the core FENGSHA dust emission for a single grid cell.
+
+    Parameters
+    ----------
+    rho_phy : float
+        Air density.
+    smois : float
+        Soil moisture.
+    ssm : float
+        Surface soil moisture.
+    xland : float
+        Land mask (1 for land).
+    ust : float
+        Friction velocity.
+    clay : float
+        Clay fraction [0-1].
+    sand : float
+        Sand fraction [0-1].
+    rdrag : float
+        Drag partition parameter.
+    u_ts0 : float
+        Threshold velocity over an ideal surface.
+
+    Returns
+    -------
+    float
+        The calculated dust emission flux for a single cell.
     """
     if xland != LAND_MASK_VALUE or ssm <= 0:
         return 0.0
@@ -201,9 +356,38 @@ def fengsha(rho_phy: float, smois: float, ssm: float, xland: float, ust: float, 
     return ssm * rho_phy / G_ACCEL_CMS2 * kvh * Q
 
 @jit(nopython=True)
-def fengsha_albedo(rho_phy: float, smois: float, ssm: float, xland: float, ust: float, clay: float, sand: float, rdrag: float, u_ts0: float) -> float:
+def fengsha_albedo(
+    rho_phy: float, smois: float, ssm: float, xland: float, ust: float,
+    clay: float, sand: float, rdrag: float, u_ts0: float
+) -> float:
     """
-    Calculate dust emission using Fengsha albedo based logic.
+    Calculates dust emission using FENGSHA albedo-based logic for a single cell.
+
+    Parameters
+    ----------
+    rho_phy : float
+        Air density.
+    smois : float
+        Soil moisture.
+    ssm : float
+        Surface soil moisture.
+    xland : float
+        Land mask (1 for land).
+    ust : float
+        Friction velocity.
+    clay : float
+        Clay fraction [0-1].
+    sand : float
+        Sand fraction [0-1].
+    rdrag : float
+        Drag partition parameter.
+    u_ts0 : float
+        Threshold velocity over an ideal surface.
+
+    Returns
+    -------
+    float
+        The calculated dust emission flux.
     """
     if xland != LAND_MASK_VALUE or ssm <= 0:
         return 0.0
@@ -219,7 +403,23 @@ def fengsha_albedo(rho_phy: float, smois: float, ssm: float, xland: float, ust: 
 
 @jit(nopython=True)
 def darmenova_drag_partition(Lc: float, vegfrac: float, thresh: float) -> float:
-    """Darmenova drag partition scheme."""
+    """
+    Calculates the Darmenova drag partition scheme for a single grid cell.
+
+    Parameters
+    ----------
+    Lc : float
+        Aerodynamic roughness length.
+    vegfrac : float
+        Vegetation fraction.
+    thresh : float
+        Vegetation fraction threshold.
+
+    Returns
+    -------
+    float
+        The effective drag partition factor.
+    """
     if vegfrac < 0.0 or vegfrac >= thresh:
         feff_veg = DRAG_MIN_VAL
     else:
@@ -243,7 +443,25 @@ def darmenova_drag_partition(Lc: float, vegfrac: float, thresh: float) -> float:
 
 @jit(nopython=True)
 def leung_drag_partition(Lc: float, lai: float, gvf: float, thresh: float) -> float:
-    """Leung drag partition scheme."""
+    """
+    Calculates the Leung drag partition scheme for a single grid cell.
+
+    Parameters
+    ----------
+    Lc : float
+        Aerodynamic roughness length.
+    lai : float
+        Leaf Area Index.
+    gvf : float
+        Green vegetation fraction.
+    thresh : float
+        LAI threshold.
+
+    Returns
+    -------
+    float
+        The effective drag partition factor.
+    """
     SMALL_VAL = 1.0E-10
     frac_bare = max(min(1.0 - lai / thresh, 1.0), SMALL_VAL)
 
@@ -267,6 +485,89 @@ def leung_drag_partition(Lc: float, lai: float, gvf: float, thresh: float) -> fl
 
     feff = (gvf * feff_veg**3 + frac_bare * feff_bare**3) ** (1.0/3.0)
     return feff if MIN_FEFF_L <= feff <= MAX_FEFF_L else MIN_FEFF_L
+
+def _calculate_drag_partition(
+    rdrag: np.ndarray, vegfrac: np.ndarray, lai: np.ndarray, drag_opt: int
+) -> np.ndarray:
+    """
+    Calculates the drag partition factor (R) based on the selected scheme.
+
+    This is a vectorized helper function that encapsulates the logic for the
+    three different drag partition options from the main FENGSHA model.
+
+    Parameters
+    ----------
+    rdrag : np.ndarray
+        1D array of the drag partition parameter for valid cells.
+    vegfrac : np.ndarray
+        1D array of the vegetation fraction for valid cells.
+    lai : np.ndarray
+        1D array of the Leaf Area Index for valid cells.
+    drag_opt : int
+        Drag option (1, 2, or 3).
+
+    Returns
+    -------
+    np.ndarray
+        1D array of the calculated drag partition factor (R) for valid cells.
+    """
+    if drag_opt == 2:
+        # Vectorized darmenova_drag_partition logic
+        feff_veg = np.full_like(vegfrac, DRAG_MIN_VAL)
+        mask_veg = (vegfrac >= 0.0) & (vegfrac < VEG_THRESHOLD_FENGSHA)
+        if np.any(mask_veg):
+            # Use np.errstate to avoid log(0) warnings for values outside the mask
+            with np.errstate(divide='ignore'):
+                Lc_veg = -0.35 * np.log(1.0 - vegfrac[mask_veg])
+            R1 = 1.0 / np.sqrt(1.0 - SIGV_D * MV_D * Lc_veg)
+            R2 = 1.0 / np.sqrt(1.0 + MV_D * BETAV_D * Lc_veg)
+            feff_veg[mask_veg] = R1 * R2
+
+        # Use np.errstate to avoid divide-by-zero warnings
+        with np.errstate(divide='ignore', invalid='ignore'):
+            Lc_bare = rdrag / (1.0 - vegfrac)
+        tmpVal = 1.0 - SIGB_D * MB_D * Lc_bare
+        feff_bare = np.full_like(rdrag, DRAG_MIN_VAL)
+        mask_bare = ~((vegfrac < 0.0) | (vegfrac >= VEG_THRESHOLD_FENGSHA) | (rdrag > 0.2) | (tmpVal <= 0.0))
+        if np.any(mask_bare):
+            R1_b = 1.0 / np.sqrt(1.0 - SIGB_D * MB_D * Lc_bare[mask_bare])
+            R2_b = 1.0 / np.sqrt(1.0 + MB_D * BETAB_D * Lc_bare[mask_bare])
+            feff_bare[mask_bare] = R1_b * R2_b
+
+        feff = feff_veg * feff_bare
+        return np.where((feff >= 1.0e-5) & (feff <= 1.0), feff, DRAG_MIN_VAL)
+
+    elif drag_opt == 3:
+        # Vectorized leung_drag_partition logic
+        SMALL_VAL = 1.0E-10
+        frac_bare = np.clip(1.0 - lai / VEG_THRESHOLD_FENGSHA, SMALL_VAL, 1.0)
+
+        feff_veg = np.zeros_like(lai)
+        mask_veg = (lai > 0.0) & (lai < VEG_THRESHOLD_FENGSHA)
+        if np.any(mask_veg):
+            K = 2.0 * (1.0 / np.maximum(1.0 - lai[mask_veg], SMALL_VAL) - 1.0)
+            feff_veg[mask_veg] = (K + F0_L * C_L) / (K + C_L)
+
+        feff_bare = np.zeros_like(rdrag)
+        mask_bare = (rdrag > 0.0) & (rdrag <= 0.2) & (lai < VEG_THRESHOLD_FENGSHA)
+        if np.any(mask_bare):
+            Lc_bare = rdrag[mask_bare] / np.maximum(frac_bare[mask_bare], SMALL_VAL)
+            tmpVal = 1.0 - SIGB_L * MB_L * Lc_bare
+
+            sub_feff_bare = np.zeros_like(Lc_bare)
+            mask_tmp = tmpVal > SMALL_VAL
+            if np.any(mask_tmp):
+                Rbare1 = 1.0 / np.sqrt(np.maximum(1.0 - SIGB_L * MB_L * Lc_bare[mask_tmp], SMALL_VAL))
+                Rbare2 = 1.0 / np.sqrt(1.0 + BETAB_L * MB_L * Lc_bare[mask_tmp])
+                sub_feff_bare[mask_tmp] = Rbare1 * Rbare2
+            feff_bare[mask_bare] = sub_feff_bare
+
+        feff = (vegfrac * feff_veg**3 + frac_bare * feff_bare**3) ** (1.0/3.0)
+        return np.where((feff >= MIN_FEFF_L) & (feff <= MAX_FEFF_L), feff, MIN_FEFF_L)
+
+    # Default case for drag_opt == 1 or any other value
+    return rdrag
+
 
 def dust_emission_fengsha(
     fraclake: np.ndarray, fracsnow: np.ndarray, oro: np.ndarray, slc: np.ndarray,
@@ -370,62 +671,7 @@ def dust_emission_fengsha(
     rdrag_v = rdrag[valid_mask]
     vegfrac_v = vegfrac[valid_mask]
     lai_v = lai[valid_mask]
-
-    R = np.zeros_like(rdrag_v)
-    if drag_opt == 1:
-        R = rdrag_v
-    elif drag_opt == 2:
-        # Vectorized darmenova_drag_partition logic
-        feff_veg = np.full_like(vegfrac_v, DRAG_MIN_VAL)
-        mask_veg = (vegfrac_v >= 0.0) & (vegfrac_v < VEG_THRESHOLD_FENGSHA)
-        if np.any(mask_veg):
-            Lc_veg = -0.35 * np.log(1.0 - vegfrac_v[mask_veg])
-            R1 = 1.0 / np.sqrt(1.0 - SIGV_D * MV_D * Lc_veg)
-            R2 = 1.0 / np.sqrt(1.0 + MV_D * BETAV_D * Lc_veg)
-            feff_veg[mask_veg] = R1 * R2
-
-        Lc_bare = rdrag_v / (1.0 - vegfrac_v)
-        tmpVal = 1.0 - SIGB_D * MB_D * Lc_bare
-        feff_bare = np.full_like(rdrag_v, DRAG_MIN_VAL)
-        mask_bare = ~((vegfrac_v < 0.0) | (vegfrac_v >= VEG_THRESHOLD_FENGSHA) | (rdrag_v > 0.2) | (tmpVal <= 0.0))
-        if np.any(mask_bare):
-            R1_b = 1.0 / np.sqrt(1.0 - SIGB_D * MB_D * Lc_bare[mask_bare])
-            R2_b = 1.0 / np.sqrt(1.0 + MB_D * BETAB_D * Lc_bare[mask_bare])
-            feff_bare[mask_bare] = R1_b * R2_b
-
-        feff = feff_veg * feff_bare
-        R = np.where((feff >= 1.0e-5) & (feff <= 1.0), feff, DRAG_MIN_VAL)
-
-    elif drag_opt == 3:
-        # Vectorized leung_drag_partition logic
-        SMALL_VAL = 1.0E-10
-        frac_bare = np.clip(1.0 - lai_v / VEG_THRESHOLD_FENGSHA, SMALL_VAL, 1.0)
-
-        feff_veg = np.zeros_like(lai_v)
-        mask_veg = (lai_v > 0.0) & (lai_v < VEG_THRESHOLD_FENGSHA)
-        if np.any(mask_veg):
-            K = 2.0 * (1.0 / np.maximum(1.0 - lai_v[mask_veg], SMALL_VAL) - 1.0)
-            feff_veg[mask_veg] = (K + F0_L * C_L) / (K + C_L)
-
-        feff_bare = np.zeros_like(rdrag_v)
-        mask_bare = (rdrag_v > 0.0) & (rdrag_v <= 0.2) & (lai_v < VEG_THRESHOLD_FENGSHA)
-        if np.any(mask_bare):
-            Lc_bare = rdrag_v[mask_bare] / np.maximum(frac_bare[mask_bare], SMALL_VAL)
-            tmpVal = 1.0 - SIGB_L * MB_L * Lc_bare
-
-            sub_feff_bare = np.zeros_like(Lc_bare)
-            mask_tmp = tmpVal > SMALL_VAL
-            if np.any(mask_tmp):
-                Rbare1 = 1.0 / np.sqrt(np.maximum(1.0 - SIGB_L * MB_L * Lc_bare[mask_tmp], SMALL_VAL))
-                Rbare2 = 1.0 / np.sqrt(1.0 + BETAB_L * MB_L * Lc_bare[mask_tmp])
-                sub_feff_bare[mask_tmp] = Rbare1 * Rbare2
-            feff_bare[mask_bare] = sub_feff_bare
-
-        feff = (vegfrac_v * feff_veg**3 + frac_bare * feff_bare**3) ** (1.0/3.0)
-        R = np.where((feff >= MIN_FEFF_L) & (feff <= MAX_FEFF_L), feff, MIN_FEFF_L)
-    else:
-        R = rdrag_v
-
+    R = _calculate_drag_partition(rdrag_v, vegfrac_v, lai_v, drag_opt)
     rustar = R * ustar[valid_mask]
 
     # --- Moisture Correction (Vectorized) ---

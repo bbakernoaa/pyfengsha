@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 import pyfengsha
 from numba import jit
+from pyfengsha.fengsha import _calculate_drag_partition
 
 
 # The original, loop-based implementation for comparison
@@ -338,6 +339,56 @@ class TestFengshaHelpers(unittest.TestCase):
         self.assertAlmostEqual(pyfengsha.leung_drag_partition(0.1, 0.5, 0.5, 0.4), 1.0E-5, places=4)
         feff = pyfengsha.leung_drag_partition(0.1, 0.2, 0.8, 0.4)
         self.assertTrue(1.0E-5 < feff < 1.0)
+
+# Find the private function for testing
+class TestCalculateDragPartition(unittest.TestCase):
+    def setUp(self):
+        """Set up common test data."""
+        self.n_pts = 20
+        np.random.seed(0)
+        self.rdrag = np.random.uniform(0.1, 0.3, self.n_pts)
+        self.vegfrac = np.random.uniform(0, 0.5, self.n_pts)
+        self.lai = np.random.uniform(0, 5, self.n_pts)
+
+    def test_drag_opt_1(self):
+        """Test drag_opt=1 (default) returns rdrag unchanged."""
+        result = _calculate_drag_partition(self.rdrag, self.vegfrac, self.lai, 1)
+        np.testing.assert_array_equal(result, self.rdrag)
+
+    def test_drag_opt_2_darmenova(self):
+        """
+        Test drag_opt=2, comparing the vectorized implementation against the
+        original scalar darmenova_drag_partition function.
+        """
+        # Calculate expected values using the original scalar function
+        VEG_THRESHOLD_FENGSHA = 0.4
+        expected = np.array([
+            pyfengsha.darmenova_drag_partition(r, v, VEG_THRESHOLD_FENGSHA)
+            for r, v in zip(self.rdrag, self.vegfrac)
+        ])
+
+        # Calculate actual values using the vectorized helper
+        actual = _calculate_drag_partition(self.rdrag, self.vegfrac, self.lai, 2)
+
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+    def test_drag_opt_3_leung(self):
+        """
+        Test drag_opt=3, comparing the vectorized implementation against the
+        original scalar leung_drag_partition function.
+        """
+        # Calculate expected values using the original scalar function
+        VEG_THRESHOLD_FENGSHA = 0.4  # Original code uses this as LAI threshold
+        expected = np.array([
+            pyfengsha.leung_drag_partition(r, lai_val, v, VEG_THRESHOLD_FENGSHA)
+            for r, lai_val, v in zip(self.rdrag, self.lai, self.vegfrac)
+        ])
+
+        # Calculate actual values using the vectorized helper
+        actual = _calculate_drag_partition(self.rdrag, self.vegfrac, self.lai, 3)
+
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
 
 if __name__ == '__main__':
     unittest.main()
