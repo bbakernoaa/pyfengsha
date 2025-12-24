@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 import pyfengsha
 from numba import jit
+from pyfengsha.fengsha import _calculate_drag_partition
 
 
 # The original, loop-based implementation for comparison
@@ -340,8 +341,6 @@ class TestFengshaHelpers(unittest.TestCase):
         self.assertTrue(1.0E-5 < feff < 1.0)
 
 # Find the private function for testing
-from pyfengsha.fengsha import _calculate_drag_partition
-
 class TestCalculateDragPartition(unittest.TestCase):
     def setUp(self):
         """Set up common test data."""
@@ -381,8 +380,8 @@ class TestCalculateDragPartition(unittest.TestCase):
         # Calculate expected values using the original scalar function
         VEG_THRESHOLD_FENGSHA = 0.4  # Original code uses this as LAI threshold
         expected = np.array([
-            pyfengsha.leung_drag_partition(r, l, v, VEG_THRESHOLD_FENGSHA)
-            for r, l, v in zip(self.rdrag, self.lai, self.vegfrac)
+            pyfengsha.leung_drag_partition(r, lai_val, v, VEG_THRESHOLD_FENGSHA)
+            for r, lai_val, v in zip(self.rdrag, self.lai, self.vegfrac)
         ])
 
         # Calculate actual values using the vectorized helper
