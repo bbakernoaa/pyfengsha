@@ -486,14 +486,102 @@ def leung_drag_partition(Lc: float, lai: float, gvf: float, thresh: float) -> fl
     feff = (gvf * feff_veg**3 + frac_bare * feff_bare**3) ** (1.0/3.0)
     return feff if MIN_FEFF_L <= feff <= MAX_FEFF_L else MIN_FEFF_L
 
+def _darmenova_drag_partition_vectorized(rdrag: np.ndarray, vegfrac: np.ndarray) -> np.ndarray:
+    """
+    Vectorized implementation of the Darmenova drag partition scheme.
+
+    Parameters
+    ----------
+    rdrag : np.ndarray
+        1D array of the drag partition parameter for valid cells.
+    vegfrac : np.ndarray
+        1D array of the vegetation fraction for valid cells.
+
+    Returns
+    -------
+    np.ndarray
+        1D array of the calculated drag partition factor.
+    """
+    # Vectorized darmenova_drag_partition logic
+    feff_veg = np.full_like(vegfrac, DRAG_MIN_VAL)
+    mask_veg = (vegfrac >= 0.0) & (vegfrac < VEG_THRESHOLD_FENGSHA)
+    if np.any(mask_veg):
+        # Use np.errstate to avoid log(0) warnings for values outside the mask
+        with np.errstate(divide='ignore'):
+            Lc_veg = -0.35 * np.log(1.0 - vegfrac[mask_veg])
+        R1 = 1.0 / np.sqrt(1.0 - SIGV_D * MV_D * Lc_veg)
+        R2 = 1.0 / np.sqrt(1.0 + MV_D * BETAV_D * Lc_veg)
+        feff_veg[mask_veg] = R1 * R2
+
+    # Use np.errstate to avoid divide-by-zero warnings
+    with np.errstate(divide='ignore', invalid='ignore'):
+        Lc_bare = rdrag / (1.0 - vegfrac)
+    tmpVal = 1.0 - SIGB_D * MB_D * Lc_bare
+    feff_bare = np.full_like(rdrag, DRAG_MIN_VAL)
+    mask_bare = ~((vegfrac < 0.0) | (vegfrac >= VEG_THRESHOLD_FENGSHA) | (rdrag > 0.2) | (tmpVal <= 0.0))
+    if np.any(mask_bare):
+        R1_b = 1.0 / np.sqrt(1.0 - SIGB_D * MB_D * Lc_bare[mask_bare])
+        R2_b = 1.0 / np.sqrt(1.0 + MB_D * BETAB_D * Lc_bare[mask_bare])
+        feff_bare[mask_bare] = R1_b * R2_b
+
+    feff = feff_veg * feff_bare
+    return np.where((feff >= 1.0e-5) & (feff <= 1.0), feff, DRAG_MIN_VAL)
+
+
+def _leung_drag_partition_vectorized(rdrag: np.ndarray, vegfrac: np.ndarray, lai: np.ndarray) -> np.ndarray:
+    """
+    Vectorized implementation of the Leung drag partition scheme.
+
+    Parameters
+    ----------
+    rdrag : np.ndarray
+        1D array of the drag partition parameter for valid cells.
+    vegfrac : np.ndarray
+        1D array of the vegetation fraction for valid cells.
+    lai : np.ndarray
+        1D array of the Leaf Area Index for valid cells.
+
+    Returns
+    -------
+    np.ndarray
+        1D array of the calculated drag partition factor.
+    """
+    # Vectorized leung_drag_partition logic
+    SMALL_VAL = 1.0E-10
+    frac_bare = np.clip(1.0 - lai / VEG_THRESHOLD_FENGSHA, SMALL_VAL, 1.0)
+
+    feff_veg = np.zeros_like(lai)
+    mask_veg = (lai > 0.0) & (lai < VEG_THRESHOLD_FENGSHA)
+    if np.any(mask_veg):
+        K = 2.0 * (1.0 / np.maximum(1.0 - lai[mask_veg], SMALL_VAL) - 1.0)
+        feff_veg[mask_veg] = (K + F0_L * C_L) / (K + C_L)
+
+    feff_bare = np.zeros_like(rdrag)
+    mask_bare = (rdrag > 0.0) & (rdrag <= 0.2) & (lai < VEG_THRESHOLD_FENGSHA)
+    if np.any(mask_bare):
+        Lc_bare = rdrag[mask_bare] / np.maximum(frac_bare[mask_bare], SMALL_VAL)
+        tmpVal = 1.0 - SIGB_L * MB_L * Lc_bare
+
+        sub_feff_bare = np.zeros_like(Lc_bare)
+        mask_tmp = tmpVal > SMALL_VAL
+        if np.any(mask_tmp):
+            Rbare1 = 1.0 / np.sqrt(np.maximum(1.0 - SIGB_L * MB_L * Lc_bare[mask_tmp], SMALL_VAL))
+            Rbare2 = 1.0 / np.sqrt(1.0 + BETAB_L * MB_L * Lc_bare[mask_tmp])
+            sub_feff_bare[mask_tmp] = Rbare1 * Rbare2
+        feff_bare[mask_bare] = sub_feff_bare
+
+    feff = (vegfrac * feff_veg**3 + frac_bare * feff_bare**3) ** (1.0/3.0)
+    return np.where((feff >= MIN_FEFF_L) & (feff <= MAX_FEFF_L), feff, MIN_FEFF_L)
+
+
 def _calculate_drag_partition(
     rdrag: np.ndarray, vegfrac: np.ndarray, lai: np.ndarray, drag_opt: int
 ) -> np.ndarray:
     """
     Calculates the drag partition factor (R) based on the selected scheme.
 
-    This is a vectorized helper function that encapsulates the logic for the
-    three different drag partition options from the main FENGSHA model.
+    This function dispatches to the appropriate vectorized drag partition
+    scheme based on the `drag_opt` parameter.
 
     Parameters
     ----------
@@ -512,58 +600,9 @@ def _calculate_drag_partition(
         1D array of the calculated drag partition factor (R) for valid cells.
     """
     if drag_opt == 2:
-        # Vectorized darmenova_drag_partition logic
-        feff_veg = np.full_like(vegfrac, DRAG_MIN_VAL)
-        mask_veg = (vegfrac >= 0.0) & (vegfrac < VEG_THRESHOLD_FENGSHA)
-        if np.any(mask_veg):
-            # Use np.errstate to avoid log(0) warnings for values outside the mask
-            with np.errstate(divide='ignore'):
-                Lc_veg = -0.35 * np.log(1.0 - vegfrac[mask_veg])
-            R1 = 1.0 / np.sqrt(1.0 - SIGV_D * MV_D * Lc_veg)
-            R2 = 1.0 / np.sqrt(1.0 + MV_D * BETAV_D * Lc_veg)
-            feff_veg[mask_veg] = R1 * R2
-
-        # Use np.errstate to avoid divide-by-zero warnings
-        with np.errstate(divide='ignore', invalid='ignore'):
-            Lc_bare = rdrag / (1.0 - vegfrac)
-        tmpVal = 1.0 - SIGB_D * MB_D * Lc_bare
-        feff_bare = np.full_like(rdrag, DRAG_MIN_VAL)
-        mask_bare = ~((vegfrac < 0.0) | (vegfrac >= VEG_THRESHOLD_FENGSHA) | (rdrag > 0.2) | (tmpVal <= 0.0))
-        if np.any(mask_bare):
-            R1_b = 1.0 / np.sqrt(1.0 - SIGB_D * MB_D * Lc_bare[mask_bare])
-            R2_b = 1.0 / np.sqrt(1.0 + MB_D * BETAB_D * Lc_bare[mask_bare])
-            feff_bare[mask_bare] = R1_b * R2_b
-
-        feff = feff_veg * feff_bare
-        return np.where((feff >= 1.0e-5) & (feff <= 1.0), feff, DRAG_MIN_VAL)
-
+        return _darmenova_drag_partition_vectorized(rdrag, vegfrac)
     elif drag_opt == 3:
-        # Vectorized leung_drag_partition logic
-        SMALL_VAL = 1.0E-10
-        frac_bare = np.clip(1.0 - lai / VEG_THRESHOLD_FENGSHA, SMALL_VAL, 1.0)
-
-        feff_veg = np.zeros_like(lai)
-        mask_veg = (lai > 0.0) & (lai < VEG_THRESHOLD_FENGSHA)
-        if np.any(mask_veg):
-            K = 2.0 * (1.0 / np.maximum(1.0 - lai[mask_veg], SMALL_VAL) - 1.0)
-            feff_veg[mask_veg] = (K + F0_L * C_L) / (K + C_L)
-
-        feff_bare = np.zeros_like(rdrag)
-        mask_bare = (rdrag > 0.0) & (rdrag <= 0.2) & (lai < VEG_THRESHOLD_FENGSHA)
-        if np.any(mask_bare):
-            Lc_bare = rdrag[mask_bare] / np.maximum(frac_bare[mask_bare], SMALL_VAL)
-            tmpVal = 1.0 - SIGB_L * MB_L * Lc_bare
-
-            sub_feff_bare = np.zeros_like(Lc_bare)
-            mask_tmp = tmpVal > SMALL_VAL
-            if np.any(mask_tmp):
-                Rbare1 = 1.0 / np.sqrt(np.maximum(1.0 - SIGB_L * MB_L * Lc_bare[mask_tmp], SMALL_VAL))
-                Rbare2 = 1.0 / np.sqrt(1.0 + BETAB_L * MB_L * Lc_bare[mask_tmp])
-                sub_feff_bare[mask_tmp] = Rbare1 * Rbare2
-            feff_bare[mask_bare] = sub_feff_bare
-
-        feff = (vegfrac * feff_veg**3 + frac_bare * feff_bare**3) ** (1.0/3.0)
-        return np.where((feff >= MIN_FEFF_L) & (feff <= MAX_FEFF_L), feff, MIN_FEFF_L)
+        return _leung_drag_partition_vectorized(rdrag, vegfrac, lai)
 
     # Default case for drag_opt == 1 or any other value
     return rdrag
