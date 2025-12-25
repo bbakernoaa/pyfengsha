@@ -2,7 +2,11 @@ import unittest
 import numpy as np
 import pyfengsha
 from numba import jit
-from pyfengsha.fengsha import _calculate_drag_partition
+from pyfengsha.fengsha import (
+    _calculate_drag_partition,
+    _darmenova_drag_partition_vectorized,
+    _leung_drag_partition_vectorized
+)
 
 
 # The original, loop-based implementation for comparison
@@ -341,6 +345,43 @@ class TestFengshaHelpers(unittest.TestCase):
         self.assertTrue(1.0E-5 < feff < 1.0)
 
 # Find the private function for testing
+
+
+class TestDragPartitionHelpers(unittest.TestCase):
+    def setUp(self):
+        """Set up common test data."""
+        self.n_pts = 20
+        np.random.seed(0)
+        self.rdrag = np.random.uniform(0.1, 0.3, self.n_pts)
+        self.vegfrac = np.random.uniform(0, 0.5, self.n_pts)
+        self.lai = np.random.uniform(0, 5, self.n_pts)
+        self.VEG_THRESHOLD_FENGSHA = 0.4
+
+    def test_darmenova_vectorized(self):
+        """
+        Test the vectorized Darmenova implementation against the original
+        scalar function.
+        """
+        expected = np.array([
+            pyfengsha.darmenova_drag_partition(r, v, self.VEG_THRESHOLD_FENGSHA)
+            for r, v in zip(self.rdrag, self.vegfrac)
+        ])
+        actual = _darmenova_drag_partition_vectorized(self.rdrag, self.vegfrac)
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+    def test_leung_vectorized(self):
+        """
+        Test the vectorized Leung implementation against the original scalar
+        function.
+        """
+        expected = np.array([
+            pyfengsha.leung_drag_partition(r, lai_val, v, self.VEG_THRESHOLD_FENGSHA)
+            for r, lai_val, v in zip(self.rdrag, self.lai, self.vegfrac)
+        ])
+        actual = _leung_drag_partition_vectorized(self.rdrag, self.vegfrac, self.lai)
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+
 class TestCalculateDragPartition(unittest.TestCase):
     def setUp(self):
         """Set up common test data."""
