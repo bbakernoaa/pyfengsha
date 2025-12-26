@@ -1,46 +1,115 @@
 import xarray as xr
+import datetime
 from .fengsha import (
     dust_emission_fengsha,
     dust_emission_gocart2g
 )
 
-def DustEmissionFENGSHA_xr(fraclake: xr.DataArray, fracsnow: xr.DataArray, oro: xr.DataArray, slc: xr.DataArray, clay: xr.DataArray, sand: xr.DataArray,
-                           ssm: xr.DataArray, rdrag: xr.DataArray, airdens: xr.DataArray, ustar: xr.DataArray, vegfrac: xr.DataArray, lai: xr.DataArray, uthrs: xr.DataArray,
-                           alpha: float, gamma: float, kvhmax: float, grav: float, distribution: xr.DataArray,
-                           drylimit_factor: float, moist_correct: float, drag_opt: int) -> xr.DataArray:
+def DustEmissionFENGSHA_xr(
+    ds: xr.Dataset,
+    alpha: float,
+    gamma: float,
+    kvhmax: float,
+    grav: float,
+    drylimit_factor: float,
+    moist_correct: float,
+    drag_opt: int
+) -> xr.DataArray:
     """
-    Xarray wrapper for DustEmissionFENGSHA.
+    Xarray wrapper for the FENGSHA dust emission scheme.
 
-    Args:
-        fraclake: Fraction of lake coverage (lat, lon).
-        fracsnow: Fraction of snow coverage (lat, lon).
-        oro: Land/water mask (lat, lon).
-        slc: Soil liquid content (lat, lon).
-        clay: Clay fraction (lat, lon).
-        sand: Sand fraction (lat, lon).
-        ssm: Surface soil moisture (lat, lon).
-        rdrag: Drag partition parameter (lat, lon).
-        airdens: Air density (lat, lon).
-        ustar: Friction velocity (lat, lon).
-        vegfrac: Vegetation fraction (lat, lon).
-        lai: Leaf Area Index (lat, lon).
-        uthrs: Threshold velocity (lat, lon).
-        alpha: Tuning parameter.
-        gamma: Tuning parameter.
-        kvhmax: Max KVH ratio.
-        grav: Gravity acceleration.
-        distribution: Size distribution per bin (bin).
-        drylimit_factor: Dry limit factor for moisture correction.
-        moist_correct: Moisture correction factor.
-        drag_opt: Drag option (1, 2, or 3).
+    This function calculates dust emissions based on a set of input variables
+    contained within a single xarray.Dataset. It preserves input coordinates
+    and updates the metadata to track data provenance.
 
-    Returns:
-        Dust emission flux (lat, lon, bin).
+    Parameters
+    ----------
+    ds : xr.Dataset
+        An xarray Dataset containing the following required variables:
+        - fracke: Fraction of lake coverage
+        - fracsnow: Fraction of snow coverage
+        - oro: Land/water mask
+        - slc: Soil liquid content
+        - clay: Clay fraction
+        - sand: Sand fraction
+        - ssm: Surface soil moisture
+        - rdrag: Drag partition parameter
+        - airdens: Air density
+        - ustar: Friction velocity
+        - vegfrac: Vegetation fraction
+        - lai: Leaf Area Index
+        - uthrs: Threshold velocity
+        - distribution: Size distribution per bin
+    alpha : float
+        Tuning parameter.
+    gamma : float
+        Tuning parameter.
+    kvhmax : float
+        Max KVH ratio.
+    grav : float
+        Gravity acceleration.
+    drylimit_factor : float
+        Dry limit factor for moisture correction.
+    moist_correct : float
+        Moisture correction factor.
+    drag_opt : int
+        Drag option (1, 2, or 3).
+
+    Returns
+    -------
+    xr.DataArray
+        A DataArray containing the calculated dust emission flux, with
+        dimensions (lat, lon, bin). The coordinates are preserved from the
+        input Dataset and a history attribute is added.
+
+    Examples
+    --------
+    >>> import xarray as xr
+    >>> import numpy as np
+    >>> # Create a sample dataset (replace with real data)
+    >>> ds = xr.Dataset({
+    ...     'fraclake': (('lat', 'lon'), np.zeros((10, 20))),
+    ...     'fracsnow': (('lat', 'lon'), np.zeros((10, 20))),
+    ...     'oro': (('lat', 'lon'), np.ones((10, 20))),
+    ...     'slc': (('lat', 'lon'), np.full((10, 20), 0.2)),
+    ...     'clay': (('lat', 'lon'), np.full((10, 20), 0.1)),
+    ...     'sand': (('lat', 'lon'), np.full((10, 20), 0.8)),
+    ...     'ssm': (('lat', 'lon'), np.full((10, 20), 0.9)),
+    ...     'rdrag': (('lat', 'lon'), np.full((10, 20), 0.95)),
+    ...     'airdens': (('lat', 'lon'), np.full((10, 20), 1.2)),
+    ...     'ustar': (('lat', 'lon'), np.full((10, 20), 0.4)),
+    ...     'vegfrac': (('lat', 'lon'), np.full((10, 20), 0.1)),
+    ...     'lai': (('lat', 'lon'), np.full((10, 20), 0.2)),
+    ...     'uthrs': (('lat', 'lon'), np.full((10, 20), 0.25)),
+    ...     'distribution': (('bin',), np.array([0.1, 0.2, 0.7]))
+    ... }, coords={'lat': np.arange(10), 'lon': np.arange(20), 'bin': np.arange(3)})
+    >>> # Run the FENGSHA model
+    >>> emissions = DustEmissionFENGSHA_xr(
+    ...     ds=ds.chunk({'lat': 5, 'lon': 10}),
+    ...     alpha=1.0, gamma=1.0, kvhmax=2.0E-4, grav=9.81,
+    ...     drylimit_factor=1.0, moist_correct=1.0, drag_opt=1
+    ... )
+    >>> print(emissions.shape)
+    (10, 20, 3)
+    >>> print('history' in emissions.attrs)
+    True
     """
-    return xr.apply_ufunc(
+    # Create a new history attribute
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    history = (
+        f"{timestamp}: Dust emissions calculated using the FENGSHA scheme."
+        f" (drag_opt={drag_opt})"
+    )
+
+    # Prepend to existing history if it exists
+    if 'history' in ds.attrs:
+        history = f"{history}\n{ds.attrs['history']}"
+
+    result = xr.apply_ufunc(
         dust_emission_fengsha,
-        fraclake, fracsnow, oro, slc, clay, sand, ssm, rdrag, airdens, ustar, vegfrac, lai, uthrs,
-        alpha, gamma, kvhmax, grav, distribution,
+        ds['fraclake'], ds['fracsnow'], ds['oro'], ds['slc'], ds['clay'], ds['sand'],
+        ds['ssm'], ds['rdrag'], ds['airdens'], ds['ustar'], ds['vegfrac'], ds['lai'],
+        ds['uthrs'], alpha, gamma, kvhmax, grav, ds['distribution'],
         drylimit_factor, moist_correct, drag_opt,
         input_core_dims=[
             ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'],
@@ -51,8 +120,12 @@ def DustEmissionFENGSHA_xr(fraclake: xr.DataArray, fracsnow: xr.DataArray, oro: 
         output_core_dims=[['lat', 'lon', 'bin']],
         vectorize=True,
         dask='parallelized',
-        output_dtypes=[float]
+        output_dtypes=[float],
+        dask_gufunc_kwargs={'allow_rechunk': True}
     )
+
+    result.attrs['history'] = history
+    return result
 
 def DustEmissionGOCART2G_xr(radius: xr.DataArray, fraclake: xr.DataArray, gwettop: xr.DataArray, oro: xr.DataArray, u10m: xr.DataArray, v10m: xr.DataArray, Ch_DU: float, du_src: xr.DataArray, grav: float) -> xr.DataArray:
     """
@@ -81,5 +154,6 @@ def DustEmissionGOCART2G_xr(radius: xr.DataArray, fraclake: xr.DataArray, gwetto
         ],
         output_core_dims=[['lat', 'lon', 'bin']],
         dask='parallelized',
-        output_dtypes=[float]
+        output_dtypes=[float],
+        dask_gufunc_kwargs={'allow_rechunk': True}
     )
