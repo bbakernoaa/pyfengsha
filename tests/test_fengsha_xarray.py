@@ -9,40 +9,58 @@ class TestFengshaXarray(unittest.TestCase):
         coords = {'lat': np.arange(ni), 'lon': np.arange(nj)}
         coords_bin = {'bin': np.arange(nbins)}
 
-        def make_da(val, shape=(ni, nj), dims=('lat', 'lon')):
-            return xr.DataArray(np.full(shape, val), coords=coords, dims=dims)
-
-        fraclake, fracsnow, oro = make_da(0.0), make_da(0.0), make_da(1.0)
-        slc, clay, sand = make_da(0.0), make_da(0.1), make_da(0.8)
-        ssm, rdrag, airdens = make_da(1.0), make_da(1.0), make_da(1.2)
-        ustar, vegfrac, lai, uthrs = make_da(0.5), make_da(0.0), make_da(0.0), make_da(0.2)
-
-        distribution = xr.DataArray(np.ones(nbins) / nbins, coords=coords_bin, dims='bin')
+        # Create a Dataset with all necessary variables
+        ds = xr.Dataset({
+            'fraclake': (('lat', 'lon'), np.full((ni, nj), 0.0)),
+            'fracsnow': (('lat', 'lon'), np.full((ni, nj), 0.0)),
+            'oro': (('lat', 'lon'), np.full((ni, nj), 1.0)),
+            'slc': (('lat', 'lon'), np.full((ni, nj), 0.0)),
+            'clay': (('lat', 'lon'), np.full((ni, nj), 0.1)),
+            'sand': (('lat', 'lon'), np.full((ni, nj), 0.8)),
+            'ssm': (('lat', 'lon'), np.full((ni, nj), 1.0)),
+            'rdrag': (('lat', 'lon'), np.full((ni, nj), 1.0)),
+            'airdens': (('lat', 'lon'), np.full((ni, nj), 1.2)),
+            'ustar': (('lat', 'lon'), np.full((ni, nj), 0.5)),
+            'vegfrac': (('lat', 'lon'), np.full((ni, nj), 0.0)),
+            'lai': (('lat', 'lon'), np.full((ni, nj), 0.0)),
+            'uthrs': (('lat', 'lon'), np.full((ni, nj), 0.2)),
+            'distribution': (('bin',), np.ones(nbins) / nbins)
+        }, coords={**coords, **coords_bin})
 
         emissions = pyfengsha.DustEmissionFENGSHA_xr(
-            fraclake, fracsnow, oro, slc, clay, sand,
-            ssm, rdrag, airdens, ustar, vegfrac, lai, uthrs,
-            1.0, 1.0, 1.0, 9.81, distribution,
-            1.0, 1.0, 1
+            ds=ds,
+            alpha=1.0, gamma=1.0, kvhmax=1.0, grav=9.81,
+            drylimit_factor=1.0, moist_correct=1.0, drag_opt=1
         )
 
         self.assertIsInstance(emissions, xr.DataArray)
         self.assertEqual(emissions.shape, (ni, nj, nbins))
         self.assertEqual(emissions.dims, ('lat', 'lon', 'bin'))
-        self.assertTrue((emissions > 0).all())
+        self.assertTrue((emissions.values > 0).all())
 
+        # Test with a time dimension
         nt = 2
-        ustar_t = ustar.expand_dims(time=np.arange(nt))
+        ds_t = ds.expand_dims(time=np.arange(nt)).copy()
+        # Update ustar to be time-dependent
+        ds_t['ustar'] = ds['ustar'].expand_dims(time=np.arange(nt))
 
+        # Re-run with the time-aware dataset
+        # Note: The underlying numpy function doesn't inherently handle the time dim,
+        # apply_ufunc maps it over the core dims, so we adjust the input_core_dims.
+        # This part of the logic is now handled internally by the refactored function
+        # which simplifies the call significantly.
+        # We need to adapt the test to reflect the new API which expects a single dataset.
+        # Since the core function isn't changing, we can test that the wrapper handles
+        # additional dimensions correctly.
         emissions_t = pyfengsha.DustEmissionFENGSHA_xr(
-            fraclake, fracsnow, oro, slc, clay, sand,
-            ssm, rdrag, airdens, ustar_t, vegfrac, lai, uthrs,
-            1.0, 1.0, 1.0, 9.81, distribution,
-            1.0, 1.0, 1
+            ds=ds_t,
+            alpha=1.0, gamma=1.0, kvhmax=1.0, grav=9.81,
+            drylimit_factor=1.0, moist_correct=1.0, drag_opt=1
         )
 
         self.assertEqual(emissions_t.shape, (nt, ni, nj, nbins))
         self.assertIn('time', emissions_t.dims)
+
 
     def test_DustEmissionGOCART2G_xr(self):
         ni, nj, nbins = 2, 2, 1
