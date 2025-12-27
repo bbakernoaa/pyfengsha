@@ -1,9 +1,7 @@
 import xarray as xr
 import datetime
-from .fengsha import (
-    dust_emission_fengsha,
-    dust_emission_gocart2g
-)
+from .fengsha import dust_emission_fengsha, dust_emission_gocart2g
+
 
 def DustEmissionFENGSHA_xr(
     ds: xr.Dataset,
@@ -13,7 +11,7 @@ def DustEmissionFENGSHA_xr(
     grav: float,
     drylimit_factor: float,
     moist_correct: float,
-    drag_opt: int
+    drag_opt: int,
 ) -> xr.DataArray:
     """
     Xarray wrapper for the FENGSHA dust emission scheme.
@@ -102,32 +100,77 @@ def DustEmissionFENGSHA_xr(
     )
 
     # Prepend to existing history if it exists
-    if 'history' in ds.attrs:
+    if "history" in ds.attrs:
         history = f"{history}\n{ds.attrs['history']}"
 
     result = xr.apply_ufunc(
         dust_emission_fengsha,
-        ds['fraclake'], ds['fracsnow'], ds['oro'], ds['slc'], ds['clay'], ds['sand'],
-        ds['ssm'], ds['rdrag'], ds['airdens'], ds['ustar'], ds['vegfrac'], ds['lai'],
-        ds['uthrs'], alpha, gamma, kvhmax, grav, ds['distribution'],
-        drylimit_factor, moist_correct, drag_opt,
+        ds["fraclake"],
+        ds["fracsnow"],
+        ds["oro"],
+        ds["slc"],
+        ds["clay"],
+        ds["sand"],
+        ds["ssm"],
+        ds["rdrag"],
+        ds["airdens"],
+        ds["ustar"],
+        ds["vegfrac"],
+        ds["lai"],
+        ds["uthrs"],
+        alpha,
+        gamma,
+        kvhmax,
+        grav,
+        ds["distribution"],
+        drylimit_factor,
+        moist_correct,
+        drag_opt,
         input_core_dims=[
-            ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'],
-            ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'],
-            [], [], [], [], ['bin'],
-            [], [], []
+            ["lat", "lon"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            [],
+            [],
+            [],
+            [],
+            ["bin"],
+            [],
+            [],
+            [],
         ],
-        output_core_dims=[['lat', 'lon', 'bin']],
+        output_core_dims=[["lat", "lon", "bin"]],
         vectorize=True,
-        dask='parallelized',
+        dask="parallelized",
         output_dtypes=[float],
-        dask_gufunc_kwargs={'allow_rechunk': True}
+        dask_gufunc_kwargs={"allow_rechunk": True},
     )
 
-    result.attrs['history'] = history
+    result.attrs["history"] = history
     return result
 
-def DustEmissionGOCART2G_xr(radius: xr.DataArray, fraclake: xr.DataArray, gwettop: xr.DataArray, oro: xr.DataArray, u10m: xr.DataArray, v10m: xr.DataArray, Ch_DU: float, du_src: xr.DataArray, grav: float) -> xr.DataArray:
+
+def DustEmissionGOCART2G_xr(
+    radius: xr.DataArray,
+    fraclake: xr.DataArray,
+    gwettop: xr.DataArray,
+    oro: xr.DataArray,
+    u10m: xr.DataArray,
+    v10m: xr.DataArray,
+    Ch_DU: float,
+    du_src: xr.DataArray,
+    grav: float,
+) -> xr.DataArray:
     """
     Xarray wrapper for DustEmissionGOCART2G.
 
@@ -147,13 +190,28 @@ def DustEmissionGOCART2G_xr(radius: xr.DataArray, fraclake: xr.DataArray, gwetto
     """
     return xr.apply_ufunc(
         dust_emission_gocart2g,
-        radius, fraclake, gwettop, oro, u10m, v10m, Ch_DU, du_src, grav,
+        radius,
+        fraclake,
+        gwettop,
+        oro,
+        u10m,
+        v10m,
+        Ch_DU,
+        du_src,
+        grav,
         input_core_dims=[
-            ['bin'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'], ['lat', 'lon'],
-            [], ['lat', 'lon'], []
+            ["bin"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            ["lat", "lon"],
+            [],
+            ["lat", "lon"],
+            [],
         ],
-        output_core_dims=[['lat', 'lon', 'bin']],
-        dask='parallelized',
+        output_core_dims=[["lat", "lon", "bin"]],
+        dask="parallelized",
         output_dtypes=[float],
-        dask_gufunc_kwargs={'allow_rechunk': True}
+        dask_gufunc_kwargs={"allow_rechunk": True},
     )
