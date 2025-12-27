@@ -2,9 +2,9 @@
 NOAA/ARL FENGSHA dust emission model and GOCART2G scheme implementations.
 """
 
-import math
 import numpy as np
 from numba import jit
+from scipy.special import erf
 
 # --- Constants ---
 # Using descriptive names for physical and model constants.
@@ -40,16 +40,17 @@ F0_L = 0.32
 SIGB_L = 1.0
 MB_L = 0.5
 BETAB_L = 90.0
-MIN_FEFF_L = 1.0E-5
+MIN_FEFF_L = 1.0e-5
 MAX_FEFF_L = 1.0
 
 # Thresholds and masks for main emission calculation
-SSM_THRESHOLD = 1.0E-02
+SSM_THRESHOLD = 1.0e-02
 VEG_THRESHOLD_FENGSHA = 0.4
 LAND_MASK_VALUE = 1.0
 MAX_RDRAG_FENGSHA = 0.3
 
 # --- Helper Functions ---
+
 
 @jit(nopython=True)
 def volumetric_to_gravimetric(vsoil: float, sandfrac: float) -> float:
@@ -64,7 +65,13 @@ def volumetric_to_gravimetric(vsoil: float, sandfrac: float) -> float:
         Gravimetric soil moisture [kg/kg].
     """
     vsat = 0.489 - 0.00126 * (sandfrac * 100.0)
-    return vsoil * WATER_DENSITY_GCM3 * 1000.0 / (SOIL_DENSITY_GCM3 * 1000.0 * (1.0 - vsat))
+    return (
+        vsoil
+        * WATER_DENSITY_GCM3
+        * 1000.0
+        / (SOIL_DENSITY_GCM3 * 1000.0 * (1.0 - vsat))
+    )
+
 
 @jit(nopython=True)
 def gocart_vol_to_grav(vsoil: float, sandfrac: float) -> float:
@@ -81,7 +88,13 @@ def gocart_vol_to_grav(vsoil: float, sandfrac: float) -> float:
         Gravimetric soil moisture [kg/kg].
     """
     vsat = 0.489 - 0.126 * sandfrac
-    return vsoil * WATER_DENSITY_GCM3 * 1000.0 / (GOCART_PARTICLE_DENSITY_GCM3 * 1000.0 * (1.0 - vsat))
+    return (
+        vsoil
+        * WATER_DENSITY_GCM3
+        * 1000.0
+        / (GOCART_PARTICLE_DENSITY_GCM3 * 1000.0 * (1.0 - vsat))
+    )
+
 
 @jit(nopython=True)
 def fecan_dry_limit(clay: float) -> float:
@@ -91,8 +104,11 @@ def fecan_dry_limit(clay: float) -> float:
         clay = 1.0e-4
     return FECAN_CLAY_COEFF_A * clay * clay + FECAN_CLAY_COEFF_B * clay
 
+
 @jit(nopython=True)
-def fecan_moisture_correction(vol_soil_moisture: float, sand: float, clay: float) -> float:
+def fecan_moisture_correction(
+    vol_soil_moisture: float, sand: float, clay: float
+) -> float:
     """
     Calculates the Fecan soil moisture correction factor (H).
     """
@@ -100,8 +116,11 @@ def fecan_moisture_correction(vol_soil_moisture: float, sand: float, clay: float
     drylimit = fecan_dry_limit(clay)
 
     if gravsm > drylimit:
-        return np.sqrt(1.0 + FECAN_MOISTURE_COEFF_A * (gravsm - drylimit)**FECAN_MOISTURE_COEFF_B)
+        return np.sqrt(
+            1.0 + FECAN_MOISTURE_COEFF_A * (gravsm - drylimit) ** FECAN_MOISTURE_COEFF_B
+        )
     return 1.0
+
 
 @jit(nopython=True)
 def gocart_moisture_correction(slc: float, sand: float, clay: float, b: float) -> float:
@@ -128,7 +147,10 @@ def gocart_moisture_correction(slc: float, sand: float, clay: float, b: float) -
     gravimetric_soil_moisture = gocart_vol_to_grav(slc, sand) * 100.0
     fecan_dry_limit_val = b * clay * (FECAN_CLAY_COEFF_A * clay + FECAN_CLAY_COEFF_B)
 
-    return np.sqrt(1.0 + 1.21 * max(0.0, gravimetric_soil_moisture - fecan_dry_limit_val)**0.68)
+    return np.sqrt(
+        1.0 + 1.21 * max(0.0, gravimetric_soil_moisture - fecan_dry_limit_val) ** 0.68
+    )
+
 
 @jit(nopython=True)
 def shao_1996_soil_moisture(w: float) -> float:
@@ -146,6 +168,7 @@ def shao_1996_soil_moisture(w: float) -> float:
         The calculated soil moisture factor.
     """
     return np.exp(22.7 * w)
+
 
 @jit(nopython=True)
 def shao_2004_soil_moisture(w: float) -> float:
@@ -165,6 +188,7 @@ def shao_2004_soil_moisture(w: float) -> float:
     if w <= 0.03:
         return np.exp(22.7 * w)
     return np.exp(95.3 * w - 2.029)
+
 
 @jit(nopython=True)
 def modified_threshold_velocity(u_ts0: float, H: float, drag: float) -> float:
@@ -187,8 +211,9 @@ def modified_threshold_velocity(u_ts0: float, H: float, drag: float) -> float:
     """
     return u_ts0 * H / drag
 
+
 @jit(nopython=True)
-def mb95_vertical_flux_ratio(clay: float, max_ratio: float = 2.0E-4) -> float:
+def mb95_vertical_flux_ratio(clay: float, max_ratio: float = 2.0e-4) -> float:
     """
     Calculates the Marticorena and Bergametti (1995) vertical flux ratio.
 
@@ -205,8 +230,9 @@ def mb95_vertical_flux_ratio(clay: float, max_ratio: float = 2.0E-4) -> float:
         The vertical to horizontal flux ratio.
     """
     if clay <= 0.2:
-        return 10.0**(13.4 * clay - 6.0)
+        return 10.0 ** (13.4 * clay - 6.0)
     return max_ratio
+
 
 @jit(nopython=True)
 def horizontal_saltation_flux(ust: float, utst: float) -> float:
@@ -229,6 +255,7 @@ def horizontal_saltation_flux(ust: float, utst: float) -> float:
         return 0.0
     return ust * (ust * ust - utst * utst)
 
+
 @jit(nopython=True)
 def mackinnon_drag_partition(z0: float) -> float:
     """
@@ -246,6 +273,7 @@ def mackinnon_drag_partition(z0: float) -> float:
     """
     z0s = 1.0e-04
     return 1.0 - np.log(z0 / z0s) / np.log(0.7 * (12255.0 / z0s) ** 0.8)
+
 
 @jit(nopython=True)
 def mb95_drag_partition(z0: float) -> float:
@@ -265,56 +293,75 @@ def mb95_drag_partition(z0: float) -> float:
     z0s = 1.0e-04
     return 1.0 - np.log(z0 / z0s) / np.log(0.7 * (10.0 / z0s) ** 0.8)
 
-@jit(nopython=True)
-def kok_aerosol_distribution(radius: np.ndarray, r_low: np.ndarray, r_up: np.ndarray) -> np.ndarray:
+
+def kok_aerosol_distribution(
+    radius: np.ndarray, r_low: np.ndarray, r_up: np.ndarray
+) -> np.ndarray:
     """
-    Computes Kok's dust size aerosol distribution.
+    Computes Kok's dust size aerosol distribution (Vectorized).
 
     This function calculates the volume distribution of aerosols across a set
-    of size bins based on Kok's model.
+    of size bins based on Kok's model. The implementation is fully vectorized
+    with NumPy for performance.
 
     Parameters
     ----------
     radius : np.ndarray
-        1D array of particle radii for each bin.
+        1D array of particle radii for each bin [m].
     r_low : np.ndarray
-        1D array of the lower bound radius for each bin.
+        1D array of the lower bound radius for each bin [m].
     r_up : np.ndarray
-        1D array of the upper bound radius for each bin.
+        1D array of the upper bound radius for each bin [m].
 
     Returns
     -------
     np.ndarray
-        1D array of the normalized volume distribution for each bin.
+        1D array of the normalized volume distribution for each bin (unitless).
+
+    Examples
+    --------
+    >>> radius = np.array([0.1, 0.5, 1.0])
+    >>> r_low = np.array([0.05, 0.45, 0.95])
+    >>> r_up = np.array([0.15, 0.55, 1.05])
+    >>> kok_aerosol_distribution(radius, r_low, r_up)
+    array([0.16568854, 0.39523267, 0.43907879])
     """
     median_mass_diameter = 3.4
     geom_std_dev = 3.0
     crack_prop_len = 12.0
     factor = 1.0 / (np.sqrt(2.0) * np.log(geom_std_dev))
 
-    num_bins = len(radius)
-    distribution = np.zeros(num_bins, dtype=np.float64)
-    total_volume = 0.0
+    diameter = 2.0 * radius
+    dlam = diameter / crack_prop_len
 
-    for n in range(num_bins):
-        diameter = 2.0 * radius[n]
-        dlam = diameter / crack_prop_len
-        dist_val = diameter * (1.0 + math.erf(factor * np.log(diameter / median_mass_diameter))) * \
-                   np.exp(-dlam**3) * np.log(r_up[n] / r_low[n])
-        distribution[n] = dist_val
-        total_volume += dist_val
+    erf_arg = factor * np.log(diameter / median_mass_diameter)
+
+    distribution = (
+        diameter * (1.0 + erf(erf_arg)) * np.exp(-(dlam**3)) * np.log(r_up / r_low)
+    )
+
+    total_volume = np.sum(distribution)
 
     # Avoid division by zero if total_volume is zero
-    if total_volume > 0:
+    if total_volume > 1.0e-15:
         return distribution / total_volume
-    return distribution
+    return np.zeros_like(distribution)
+
 
 # --- Main Emission Schemes ---
 
+
 @jit(nopython=True)
 def fengsha(
-    rho_phy: float, smois: float, ssm: float, xland: float, ust: float,
-    clay: float, sand: float, rdrag: float, u_ts0: float
+    rho_phy: float,
+    smois: float,
+    ssm: float,
+    xland: float,
+    ust: float,
+    clay: float,
+    sand: float,
+    rdrag: float,
+    u_ts0: float,
 ) -> float:
     """
     Calculates the core FENGSHA dust emission for a single grid cell.
@@ -355,10 +402,18 @@ def fengsha(
 
     return ssm * rho_phy / G_ACCEL_CMS2 * kvh * Q
 
+
 @jit(nopython=True)
 def fengsha_albedo(
-    rho_phy: float, smois: float, ssm: float, xland: float, ust: float,
-    clay: float, sand: float, rdrag: float, u_ts0: float
+    rho_phy: float,
+    smois: float,
+    ssm: float,
+    xland: float,
+    ust: float,
+    clay: float,
+    sand: float,
+    rdrag: float,
+    u_ts0: float,
 ) -> float:
     """
     Calculates dust emission using FENGSHA albedo-based logic for a single cell.
@@ -401,6 +456,7 @@ def fengsha_albedo(
 
     return ssm * rho_phy / G_ACCEL_CMS2 * kvh * Q
 
+
 @jit(nopython=True)
 def darmenova_drag_partition(Lc: float, vegfrac: float, thresh: float) -> float:
     """
@@ -441,6 +497,7 @@ def darmenova_drag_partition(Lc: float, vegfrac: float, thresh: float) -> float:
     feff = feff_veg * feff_bare
     return feff if 1.0e-5 <= feff <= 1.0 else DRAG_MIN_VAL
 
+
 @jit(nopython=True)
 def leung_drag_partition(Lc: float, lai: float, gvf: float, thresh: float) -> float:
     """
@@ -462,7 +519,7 @@ def leung_drag_partition(Lc: float, lai: float, gvf: float, thresh: float) -> fl
     float
         The effective drag partition factor.
     """
-    SMALL_VAL = 1.0E-10
+    SMALL_VAL = 1.0e-10
     frac_bare = max(min(1.0 - lai / thresh, 1.0), SMALL_VAL)
 
     if lai <= 0.0 or lai >= thresh:
@@ -483,10 +540,13 @@ def leung_drag_partition(Lc: float, lai: float, gvf: float, thresh: float) -> fl
     else:
         feff_bare = 0.0
 
-    feff = (gvf * feff_veg**3 + frac_bare * feff_bare**3) ** (1.0/3.0)
+    feff = (gvf * feff_veg**3 + frac_bare * feff_bare**3) ** (1.0 / 3.0)
     return feff if MIN_FEFF_L <= feff <= MAX_FEFF_L else MIN_FEFF_L
 
-def _darmenova_drag_partition_vectorized(rdrag: np.ndarray, vegfrac: np.ndarray) -> np.ndarray:
+
+def _darmenova_drag_partition_vectorized(
+    rdrag: np.ndarray, vegfrac: np.ndarray
+) -> np.ndarray:
     """
     Vectorized implementation of the Darmenova drag partition scheme.
 
@@ -507,18 +567,23 @@ def _darmenova_drag_partition_vectorized(rdrag: np.ndarray, vegfrac: np.ndarray)
     mask_veg = (vegfrac >= 0.0) & (vegfrac < VEG_THRESHOLD_FENGSHA)
     if np.any(mask_veg):
         # Use np.errstate to avoid log(0) warnings for values outside the mask
-        with np.errstate(divide='ignore'):
+        with np.errstate(divide="ignore"):
             Lc_veg = -0.35 * np.log(1.0 - vegfrac[mask_veg])
         R1 = 1.0 / np.sqrt(1.0 - SIGV_D * MV_D * Lc_veg)
         R2 = 1.0 / np.sqrt(1.0 + MV_D * BETAV_D * Lc_veg)
         feff_veg[mask_veg] = R1 * R2
 
     # Use np.errstate to avoid divide-by-zero warnings
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with np.errstate(divide="ignore", invalid="ignore"):
         Lc_bare = rdrag / (1.0 - vegfrac)
     tmpVal = 1.0 - SIGB_D * MB_D * Lc_bare
     feff_bare = np.full_like(rdrag, DRAG_MIN_VAL)
-    mask_bare = ~((vegfrac < 0.0) | (vegfrac >= VEG_THRESHOLD_FENGSHA) | (rdrag > 0.2) | (tmpVal <= 0.0))
+    mask_bare = ~(
+        (vegfrac < 0.0)
+        | (vegfrac >= VEG_THRESHOLD_FENGSHA)
+        | (rdrag > 0.2)
+        | (tmpVal <= 0.0)
+    )
     if np.any(mask_bare):
         R1_b = 1.0 / np.sqrt(1.0 - SIGB_D * MB_D * Lc_bare[mask_bare])
         R2_b = 1.0 / np.sqrt(1.0 + MB_D * BETAB_D * Lc_bare[mask_bare])
@@ -528,7 +593,9 @@ def _darmenova_drag_partition_vectorized(rdrag: np.ndarray, vegfrac: np.ndarray)
     return np.where((feff >= 1.0e-5) & (feff <= 1.0), feff, DRAG_MIN_VAL)
 
 
-def _leung_drag_partition_vectorized(rdrag: np.ndarray, vegfrac: np.ndarray, lai: np.ndarray) -> np.ndarray:
+def _leung_drag_partition_vectorized(
+    rdrag: np.ndarray, vegfrac: np.ndarray, lai: np.ndarray
+) -> np.ndarray:
     """
     Vectorized implementation of the Leung drag partition scheme.
 
@@ -547,7 +614,7 @@ def _leung_drag_partition_vectorized(rdrag: np.ndarray, vegfrac: np.ndarray, lai
         1D array of the calculated drag partition factor.
     """
     # Vectorized leung_drag_partition logic
-    SMALL_VAL = 1.0E-10
+    SMALL_VAL = 1.0e-10
     frac_bare = np.clip(1.0 - lai / VEG_THRESHOLD_FENGSHA, SMALL_VAL, 1.0)
 
     feff_veg = np.zeros_like(lai)
@@ -565,12 +632,14 @@ def _leung_drag_partition_vectorized(rdrag: np.ndarray, vegfrac: np.ndarray, lai
         sub_feff_bare = np.zeros_like(Lc_bare)
         mask_tmp = tmpVal > SMALL_VAL
         if np.any(mask_tmp):
-            Rbare1 = 1.0 / np.sqrt(np.maximum(1.0 - SIGB_L * MB_L * Lc_bare[mask_tmp], SMALL_VAL))
+            Rbare1 = 1.0 / np.sqrt(
+                np.maximum(1.0 - SIGB_L * MB_L * Lc_bare[mask_tmp], SMALL_VAL)
+            )
             Rbare2 = 1.0 / np.sqrt(1.0 + BETAB_L * MB_L * Lc_bare[mask_tmp])
             sub_feff_bare[mask_tmp] = Rbare1 * Rbare2
         feff_bare[mask_bare] = sub_feff_bare
 
-    feff = (vegfrac * feff_veg**3 + frac_bare * feff_bare**3) ** (1.0/3.0)
+    feff = (vegfrac * feff_veg**3 + frac_bare * feff_bare**3) ** (1.0 / 3.0)
     return np.where((feff >= MIN_FEFF_L) & (feff <= MAX_FEFF_L), feff, MIN_FEFF_L)
 
 
@@ -609,11 +678,27 @@ def _calculate_drag_partition(
 
 
 def dust_emission_fengsha(
-    fraclake: np.ndarray, fracsnow: np.ndarray, oro: np.ndarray, slc: np.ndarray,
-    clay: np.ndarray, sand: np.ndarray, ssm: np.ndarray, rdrag: np.ndarray,
-    airdens: np.ndarray, ustar: np.ndarray, vegfrac: np.ndarray, lai: np.ndarray,
-    uthrs: np.ndarray, alpha: float, gamma: float, kvhmax: float, grav: float,
-    distribution: np.ndarray, drylimit_factor: float, moist_correct: float, drag_opt: int
+    fraclake: np.ndarray,
+    fracsnow: np.ndarray,
+    oro: np.ndarray,
+    slc: np.ndarray,
+    clay: np.ndarray,
+    sand: np.ndarray,
+    ssm: np.ndarray,
+    rdrag: np.ndarray,
+    airdens: np.ndarray,
+    ustar: np.ndarray,
+    vegfrac: np.ndarray,
+    lai: np.ndarray,
+    uthrs: np.ndarray,
+    alpha: float,
+    gamma: float,
+    kvhmax: float,
+    grav: float,
+    distribution: np.ndarray,
+    drylimit_factor: float,
+    moist_correct: float,
+    drag_opt: int,
 ) -> np.ndarray:
     """
     Compute dust emissions using NOAA/ARL FENGSHA model (Vectorized).
@@ -673,17 +758,23 @@ def dust_emission_fengsha(
         3D array of emissions of shape (ni, nj, nbins).
     """
     # --- Create a mask for valid grid cells to perform calculations on ---
-    valid_mask = (oro == LAND_MASK_VALUE) & \
-                 (ssm >= SSM_THRESHOLD) & \
-                 (clay >= 0.0) & \
-                 (sand >= 0.0)
+    valid_mask = (
+        (oro == LAND_MASK_VALUE)
+        & (ssm >= SSM_THRESHOLD)
+        & (clay >= 0.0)
+        & (sand >= 0.0)
+    )
 
     if drag_opt == 2:
-        valid_mask &= ~((vegfrac < 0.0) | (vegfrac >= VEG_THRESHOLD_FENGSHA) | (rdrag > MAX_RDRAG_FENGSHA))
+        valid_mask &= ~(
+            (vegfrac < 0.0)
+            | (vegfrac >= VEG_THRESHOLD_FENGSHA)
+            | (rdrag > MAX_RDRAG_FENGSHA)
+        )
     elif drag_opt == 3:
         valid_mask &= ~((vegfrac < 0.0) | (lai >= VEG_THRESHOLD_FENGSHA))
     else:  # drag_opt == 1 or other default case
-        valid_mask &= (rdrag >= 0.0)
+        valid_mask &= rdrag >= 0.0
 
     # Initialize emissions array to zeros
     emissions = np.zeros(fraclake.shape + (len(distribution),), dtype=np.float64)
@@ -694,17 +785,20 @@ def dust_emission_fengsha(
 
     # --- Perform calculations only on the valid cells ---
     # Slicing with the mask flattens the array, which is fine as we'll place it back later.
-    fracland = np.maximum(0.0, 1.0 - fraclake[valid_mask]) * \
-               np.maximum(0.0, 1.0 - fracsnow[valid_mask])
+    fracland = np.maximum(0.0, 1.0 - fraclake[valid_mask]) * np.maximum(
+        0.0, 1.0 - fracsnow[valid_mask]
+    )
 
     # Vectorized mb95_vertical_flux_ratio
     clay_v = clay[valid_mask]
     kvh = np.full_like(clay_v, kvhmax)
     sub_mask = clay_v <= 0.2
-    kvh[sub_mask] = 10.0**(13.4 * clay_v[sub_mask] - 6.0)
+    kvh[sub_mask] = 10.0 ** (13.4 * clay_v[sub_mask] - 6.0)
 
-    alpha_grav = alpha / max(grav, 1.0E-10)
-    total_emissions = alpha_grav * fracland * (ssm[valid_mask] ** gamma) * airdens[valid_mask] * kvh
+    alpha_grav = alpha / max(grav, 1.0e-10)
+    total_emissions = (
+        alpha_grav * fracland * (ssm[valid_mask] ** gamma) * airdens[valid_mask] * kvh
+    )
 
     # --- Drag Partition Calculation (Vectorized) ---
     rdrag_v = rdrag[valid_mask]
@@ -718,8 +812,16 @@ def dust_emission_fengsha(
     sand_v = sand[valid_mask]
     # Vectorized gocart_vol_to_grav
     vsat = 0.489 - 0.126 * sand_v
-    gravimetric_soil_moisture = smois * WATER_DENSITY_GCM3 * 1000.0 / (GOCART_PARTICLE_DENSITY_GCM3 * 1000.0 * (1.0 - vsat)) * 100.0
-    fecan_dry_limit_val = drylimit_factor * clay_v * (FECAN_CLAY_COEFF_A * clay_v + FECAN_CLAY_COEFF_B)
+    gravimetric_soil_moisture = (
+        smois
+        * WATER_DENSITY_GCM3
+        * 1000.0
+        / (GOCART_PARTICLE_DENSITY_GCM3 * 1000.0 * (1.0 - vsat))
+        * 100.0
+    )
+    fecan_dry_limit_val = (
+        drylimit_factor * clay_v * (FECAN_CLAY_COEFF_A * clay_v + FECAN_CLAY_COEFF_B)
+    )
 
     correction_term = np.maximum(0.0, gravimetric_soil_moisture - fecan_dry_limit_val)
     h = np.sqrt(1.0 + 1.21 * correction_term**0.68)
@@ -734,16 +836,26 @@ def dust_emission_fengsha(
     # Reshape for broadcasting: (n_valid,) -> (n_valid, 1)
     # distribution has shape (nbins,) -> (1, nbins)
     # Resulting shape after broadcasting: (n_valid, nbins)
-    final_emissions_v = (total_emissions * q)[:, np.newaxis] * distribution[np.newaxis, :]
+    final_emissions_v = (total_emissions * q)[:, np.newaxis] * distribution[
+        np.newaxis, :
+    ]
 
     # Place the calculated values back into the full-sized emissions array
     emissions[valid_mask] = final_emissions_v
 
     return emissions
 
+
 def dust_emission_gocart2g(
-    radius: np.ndarray, fraclake: np.ndarray, gwettop: np.ndarray, oro: np.ndarray,
-    u10m: np.ndarray, v10m: np.ndarray, Ch_DU: float, du_src: np.ndarray, grav: float
+    radius: np.ndarray,
+    fraclake: np.ndarray,
+    gwettop: np.ndarray,
+    oro: np.ndarray,
+    u10m: np.ndarray,
+    v10m: np.ndarray,
+    Ch_DU: float,
+    du_src: np.ndarray,
+    grav: float,
 ) -> np.ndarray:
     """
     Computes dust emissions using GOCART2G scheme (Vectorized).
@@ -791,7 +903,7 @@ def dust_emission_gocart2g(
     # `u_thresh0` has shape (nbins,)
     term1 = np.sqrt(soil_density * grav * diameter / air_dens)
     term2 = np.sqrt(1.0 + 6.0e-7 / (soil_density * grav * diameter**2.5))
-    term3 = np.sqrt(1.928 * (1331.0 * (100.0 * diameter)**1.56 + 0.38)**0.092 - 1.0)
+    term3 = np.sqrt(1.928 * (1331.0 * (100.0 * diameter) ** 1.56 + 0.38) ** 0.092 - 1.0)
     u_thresh0 = 0.13 * term1 * term2 / term3
 
     # --- Vectorized wind speed ---
@@ -820,7 +932,7 @@ def dust_emission_gocart2g(
     # Shape broadcasting: `gwettop_v` (n_valid,) -> (n_valid, 1)
     # `u_thresh0` (nbins,) -> (1, nbins)
     # `u_thresh` has shape (n_valid, nbins)
-    log_gwettop = np.log10(np.maximum(1.e-3, gwettop_v))
+    log_gwettop = np.log10(np.maximum(1.0e-3, gwettop_v))
     u_thresh = u_thresh0[np.newaxis, :] * (1.2 + 0.2 * log_gwettop[:, np.newaxis])
     u_thresh = np.maximum(0.0, u_thresh)
 
@@ -828,14 +940,16 @@ def dust_emission_gocart2g(
     # Shape broadcasting: `w10m_v` (n_valid,) -> (n_valid, 1)
     # `w10m_v` is compared against each bin's threshold in `u_thresh`
     # `flux` has shape (n_valid, nbins)
-    flux = (w10m_v[:, np.newaxis]**2) * (w10m_v[:, np.newaxis] - u_thresh)
+    flux = (w10m_v[:, np.newaxis] ** 2) * (w10m_v[:, np.newaxis] - u_thresh)
 
     # Apply wind threshold mask (where w10m > u_thresh)
     flux = np.where(w10m_v[:, np.newaxis] > u_thresh, flux, 0.0)
 
     # Apply lake and source function scaling
     # Broadcasting: `fraclake_v` and `du_src_v` (n_valid,) -> (n_valid, 1)
-    scaled_flux = Ch_DU * (1.0 - fraclake_v[:, np.newaxis]) * du_src_v[:, np.newaxis] * flux
+    scaled_flux = (
+        Ch_DU * (1.0 - fraclake_v[:, np.newaxis]) * du_src_v[:, np.newaxis] * flux
+    )
 
     # Place the calculated values back into the full-sized emissions array
     emissions[valid_mask] = scaled_flux

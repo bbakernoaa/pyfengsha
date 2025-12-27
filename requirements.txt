@@ -3,3 +3,4 @@ numba
 xarray
 dask
 ruff
+scipy
