@@ -2,7 +2,6 @@
 NOAA/ARL FENGSHA dust emission model and GOCART2G scheme implementations.
 """
 
-import math
 import numpy as np
 from numba import jit
 from scipy.special import erf
