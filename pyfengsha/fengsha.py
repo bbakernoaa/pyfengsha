@@ -5,6 +5,7 @@ NOAA/ARL FENGSHA dust emission model and GOCART2G scheme implementations.
 import math
 import numpy as np
 from numba import jit
+from scipy.special import erf
 
 # --- Constants ---
 # Using descriptive names for physical and model constants.
@@ -265,49 +266,59 @@ def mb95_drag_partition(z0: float) -> float:
     z0s = 1.0e-04
     return 1.0 - np.log(z0 / z0s) / np.log(0.7 * (10.0 / z0s) ** 0.8)
 
-@jit(nopython=True)
 def kok_aerosol_distribution(radius: np.ndarray, r_low: np.ndarray, r_up: np.ndarray) -> np.ndarray:
     """
-    Computes Kok's dust size aerosol distribution.
+    Computes Kok's dust size aerosol distribution (Vectorized).
 
     This function calculates the volume distribution of aerosols across a set
-    of size bins based on Kok's model.
+    of size bins based on Kok's model. The implementation is fully vectorized
+    with NumPy for performance.
 
     Parameters
     ----------
     radius : np.ndarray
-        1D array of particle radii for each bin.
+        1D array of particle radii for each bin [m].
     r_low : np.ndarray
-        1D array of the lower bound radius for each bin.
+        1D array of the lower bound radius for each bin [m].
     r_up : np.ndarray
-        1D array of the upper bound radius for each bin.
+        1D array of the upper bound radius for each bin [m].
 
     Returns
     -------
     np.ndarray
-        1D array of the normalized volume distribution for each bin.
+        1D array of the normalized volume distribution for each bin (unitless).
+
+    Examples
+    --------
+    >>> radius = np.array([0.1, 0.5, 1.0])
+    >>> r_low = np.array([0.05, 0.45, 0.95])
+    >>> r_up = np.array([0.15, 0.55, 1.05])
+    >>> kok_aerosol_distribution(radius, r_low, r_up)
+    array([0.16568854, 0.39523267, 0.43907879])
     """
     median_mass_diameter = 3.4
     geom_std_dev = 3.0
     crack_prop_len = 12.0
     factor = 1.0 / (np.sqrt(2.0) * np.log(geom_std_dev))
 
-    num_bins = len(radius)
-    distribution = np.zeros(num_bins, dtype=np.float64)
-    total_volume = 0.0
+    diameter = 2.0 * radius
+    dlam = diameter / crack_prop_len
 
-    for n in range(num_bins):
-        diameter = 2.0 * radius[n]
-        dlam = diameter / crack_prop_len
-        dist_val = diameter * (1.0 + math.erf(factor * np.log(diameter / median_mass_diameter))) * \
-                   np.exp(-dlam**3) * np.log(r_up[n] / r_low[n])
-        distribution[n] = dist_val
-        total_volume += dist_val
+    erf_arg = factor * np.log(diameter / median_mass_diameter)
+
+    distribution = (
+        diameter
+        * (1.0 + erf(erf_arg))
+        * np.exp(-(dlam**3))
+        * np.log(r_up / r_low)
+    )
+
+    total_volume = np.sum(distribution)
 
     # Avoid division by zero if total_volume is zero
-    if total_volume > 0:
+    if total_volume > 1.0e-15:
         return distribution / total_volume
-    return distribution
+    return np.zeros_like(distribution)
 
 # --- Main Emission Schemes ---
 

@@ -1,4 +1,5 @@
 import unittest
+import math
 import numpy as np
 import pyfengsha
 from numba import jit
@@ -99,6 +100,54 @@ class TestFengsha(unittest.TestCase):
         dist = pyfengsha.kok_aerosol_distribution(radius, rLow, rUp)
         self.assertEqual(len(dist), 3)
         self.assertAlmostEqual(np.sum(dist), 1.0, places=5)
+
+    def test_kok_aerosol_distribution_vectorization(self):
+        """
+        Verify that the vectorized `kok_aerosol_distribution` function produces
+        the same output as the original, JIT-compiled loop version.
+        """
+        # --- Original, loop-based implementation for comparison ---
+        @jit(nopython=True)
+        def kok_aerosol_distribution_original(radius: np.ndarray, r_low: np.ndarray, r_up: np.ndarray) -> np.ndarray:
+            median_mass_diameter = 3.4
+            geom_std_dev = 3.0
+            crack_prop_len = 12.0
+            factor = 1.0 / (np.sqrt(2.0) * np.log(geom_std_dev))
+            num_bins = len(radius)
+            distribution = np.zeros(num_bins, dtype=np.float64)
+            total_volume = 0.0
+            for n in range(num_bins):
+                diameter = 2.0 * radius[n]
+                dlam = diameter / crack_prop_len
+                # Numba requires `math.erf` for scalar op
+                dist_val = diameter * (1.0 + math.erf(factor * np.log(diameter / median_mass_diameter))) * \
+                           np.exp(-dlam**3) * np.log(r_up[n] / r_low[n])
+                distribution[n] = dist_val
+                total_volume += dist_val
+            if total_volume > 0:
+                return distribution / total_volume
+            return distribution
+
+        # --- Test Data Setup ---
+        np.random.seed(0)
+        nbins = 10
+        radius = np.random.uniform(0.1, 5.0, nbins)
+        r_low = radius - 0.05
+        r_up = radius + 0.05
+
+        # --- Run both versions and compare ---
+        dist_original = kok_aerosol_distribution_original(radius, r_low, r_up)
+        dist_vectorized = pyfengsha.kok_aerosol_distribution(radius, r_low, r_up)
+
+        # --- Verification ---
+        self.assertEqual(dist_original.shape, dist_vectorized.shape)
+        np.testing.assert_allclose(
+            dist_original,
+            dist_vectorized,
+            rtol=1e-12,
+            atol=1e-12,
+            err_msg="Mismatch between original and vectorized Kok distribution."
+        )
 
     def test_dust_emission_fengsha(self):
         ni, nj, nbins = 2, 2, 3
