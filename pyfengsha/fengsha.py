@@ -54,14 +54,18 @@ MAX_RDRAG_FENGSHA = 0.3
 
 @jit(nopython=True)
 def volumetric_to_gravimetric(vsoil: float, sandfrac: float) -> float:
-    """
-    Convert volumetric soil moisture to gravimetric based on FENGSHA scheme.
+    """Convert volumetric soil moisture to gravimetric based on FENGSHA scheme.
 
-    Args:
-        vsoil: Volumetric Soil Moisture [m3/m3].
-        sandfrac: Fractional Sand content [0-1].
+    Parameters
+    ----------
+    vsoil : float
+        Volumetric Soil Moisture [m3/m3].
+    sandfrac : float
+        Fractional Sand content [0-1].
 
-    Returns:
+    Returns
+    -------
+    float
         Gravimetric soil moisture [kg/kg].
     """
     vsat = 0.489 - 0.00126 * (sandfrac * 100.0)
@@ -75,16 +79,23 @@ def volumetric_to_gravimetric(vsoil: float, sandfrac: float) -> float:
 
 @jit(nopython=True)
 def gocart_vol_to_grav(vsoil: float, sandfrac: float) -> float:
-    """
-    Convert volumetric soil moisture to gravimetric based on GOCART scheme.
-    Note: The original returned a value scaled by 100. This is now done
-    at the call site for clarity.
+    """Convert volumetric soil moisture to gravimetric based on GOCART scheme.
 
-    Args:
-        vsoil: Volumetric Soil Moisture [m3/m3].
-        sandfrac: Fractional Sand content [0-1].
+    Note
+    ----
+    The original Fortran code returned a value scaled by 100. This is
+    now done at the call site for clarity.
 
-    Returns:
+    Parameters
+    ----------
+    vsoil : float
+        Volumetric Soil Moisture [m3/m3].
+    sandfrac : float
+        Fractional Sand content [0-1].
+
+    Returns
+    -------
+    float
         Gravimetric soil moisture [kg/kg].
     """
     vsat = 0.489 - 0.126 * sandfrac
@@ -98,7 +109,18 @@ def gocart_vol_to_grav(vsoil: float, sandfrac: float) -> float:
 
 @jit(nopython=True)
 def fecan_dry_limit(clay: float) -> float:
-    """Calculates the Fecan dry limit for soil moisture."""
+    """Calculates the Fecan dry limit for soil moisture.
+
+    Parameters
+    ----------
+    clay : float
+        Clay fraction [0-1].
+
+    Returns
+    -------
+    float
+        The Fecan dry limit for soil moisture.
+    """
     if clay <= 0.0:
         # Using an epsilon for stability with zero clay
         clay = 1.0e-4
@@ -109,8 +131,21 @@ def fecan_dry_limit(clay: float) -> float:
 def fecan_moisture_correction(
     vol_soil_moisture: float, sand: float, clay: float
 ) -> float:
-    """
-    Calculates the Fecan soil moisture correction factor (H).
+    """Calculates the Fecan soil moisture correction factor (H).
+
+    Parameters
+    ----------
+    vol_soil_moisture : float
+        Volumetric soil moisture [m3/m3].
+    sand : float
+        Sand fraction [0-1].
+    clay : float
+        Clay fraction [0-1].
+
+    Returns
+    -------
+    float
+        The Fecan soil moisture correction factor.
     """
     gravsm = volumetric_to_gravimetric(vol_soil_moisture, sand)
     drylimit = fecan_dry_limit(clay)
