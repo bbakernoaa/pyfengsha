@@ -3,8 +3,9 @@ NOAA/ARL FENGSHA dust emission model and GOCART2G scheme implementations.
 """
 
 import numpy as np
-from numba import jit
-from scipy.special import erf
+import math
+
+from numba import jit, vectorize
 
 # --- Constants ---
 # Using descriptive names for physical and model constants.
@@ -329,6 +330,28 @@ def mb95_drag_partition(z0: float) -> float:
     return 1.0 - np.log(z0 / z0s) / np.log(0.7 * (10.0 / z0s) ** 0.8)
 
 
+@vectorize("float64(float64, float64, float64)", nopython=True, cache=True)
+def _kok_aerosol_distribution_ufunc(radius: float, r_low: float, r_up: float) -> float:
+    """Numba ufunc for Kok's aerosol distribution (element-wise)."""
+    median_mass_diameter = 3.4
+    geom_std_dev = 3.0
+    crack_prop_len = 12.0
+    factor = 1.0 / (np.sqrt(2.0) * np.log(geom_std_dev))
+
+    diameter = 2.0 * radius
+    dlam = diameter / crack_prop_len
+
+    erf_arg = factor * np.log(diameter / median_mass_diameter)
+
+    # Numba compatible erf
+    return (
+        diameter
+        * (1.0 + math.erf(erf_arg))
+        * np.exp(-(dlam**3))
+        * np.log(r_up / r_low)
+    )
+
+
 def kok_aerosol_distribution(
     radius: np.ndarray, r_low: np.ndarray, r_up: np.ndarray
 ) -> np.ndarray:
@@ -336,8 +359,8 @@ def kok_aerosol_distribution(
     Computes Kok's dust size aerosol distribution (Vectorized).
 
     This function calculates the volume distribution of aerosols across a set
-    of size bins based on Kok's model. The implementation is fully vectorized
-    with NumPy for performance.
+    of size bins based on Kok's model. The implementation is now a wrapper
+    around a high-performance Numba ufunc.
 
     Parameters
     ----------
@@ -361,20 +384,7 @@ def kok_aerosol_distribution(
     >>> kok_aerosol_distribution(radius, r_low, r_up)
     array([0.16568854, 0.39523267, 0.43907879])
     """
-    median_mass_diameter = 3.4
-    geom_std_dev = 3.0
-    crack_prop_len = 12.0
-    factor = 1.0 / (np.sqrt(2.0) * np.log(geom_std_dev))
-
-    diameter = 2.0 * radius
-    dlam = diameter / crack_prop_len
-
-    erf_arg = factor * np.log(diameter / median_mass_diameter)
-
-    distribution = (
-        diameter * (1.0 + erf(erf_arg)) * np.exp(-(dlam**3)) * np.log(r_up / r_low)
-    )
-
+    distribution = _kok_aerosol_distribution_ufunc(radius, r_low, r_up)
     total_volume = np.sum(distribution)
 
     # Avoid division by zero if total_volume is zero
