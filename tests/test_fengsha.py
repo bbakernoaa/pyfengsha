@@ -3,6 +3,7 @@ import math
 import numpy as np
 import pyfengsha
 from numba import jit
+from scipy.special import erf
 from pyfengsha.fengsha import (
     _calculate_drag_partition,
     _darmenova_drag_partition_vectorized,
@@ -192,6 +193,57 @@ class TestFengsha(unittest.TestCase):
             rtol=1e-12,
             atol=1e-12,
             err_msg="Mismatch between original and vectorized Kok distribution.",
+        )
+
+    def test_kok_aerosol_distribution_against_numpy(self):
+        """
+        Verify that the Numba ufunc version of `kok_aerosol_distribution`
+        produces the same output as a pure NumPy implementation. This ensures
+        the logic is correct and the `erf` function is handled properly.
+        """
+
+        # --- Pure NumPy implementation for comparison ---
+        def kok_aerosol_distribution_numpy(
+            radius: np.ndarray, r_low: np.ndarray, r_up: np.ndarray
+        ) -> np.ndarray:
+            median_mass_diameter = 3.4
+            geom_std_dev = 3.0
+            crack_prop_len = 12.0
+            factor = 1.0 / (np.sqrt(2.0) * np.log(geom_std_dev))
+            diameter = 2.0 * radius
+            dlam = diameter / crack_prop_len
+            erf_arg = factor * np.log(diameter / median_mass_diameter)
+            # Use scipy's erf for the numpy version
+            distribution = (
+                diameter
+                * (1.0 + erf(erf_arg))
+                * np.exp(-(dlam**3))
+                * np.log(r_up / r_low)
+            )
+            total_volume = np.sum(distribution)
+            if total_volume > 1.0e-15:
+                return distribution / total_volume
+            return np.zeros_like(distribution)
+
+        # --- Test Data Setup ---
+        np.random.seed(42)
+        nbins = 15
+        radius = np.random.uniform(0.1, 5.0, nbins)
+        r_low = radius - 0.05
+        r_up = radius + 0.05
+
+        # --- Run both versions and compare ---
+        dist_numpy = kok_aerosol_distribution_numpy(radius, r_low, r_up)
+        dist_numba = pyfengsha.kok_aerosol_distribution(radius, r_low, r_up)
+
+        # --- Verification ---
+        self.assertEqual(dist_numpy.shape, dist_numba.shape)
+        np.testing.assert_allclose(
+            dist_numpy,
+            dist_numba,
+            rtol=1e-12,
+            atol=1e-12,
+            err_msg="Mismatch between pure NumPy and Numba ufunc Kok distribution.",
         )
 
     def test_dust_emission_fengsha(self):
