@@ -78,23 +78,28 @@ class TestFengshaXarray(unittest.TestCase):
     def test_DustEmissionGOCART2G_xr(self):
         ni, nj, nbins = 2, 2, 1
         coords = {"lat": np.arange(ni), "lon": np.arange(nj)}
+        coords_bin = {"bin": np.arange(nbins)}
 
-        radius = xr.DataArray([1.0e-6], dims="bin")
-        fraclake = xr.DataArray(np.zeros((ni, nj)), coords=coords, dims=("lat", "lon"))
-        gwettop = xr.DataArray(
-            np.full((ni, nj), 0.1), coords=coords, dims=("lat", "lon")
+        # Create a Dataset with all necessary variables
+        ds = xr.Dataset(
+            {
+                "radius": (("bin",), np.array([1.0e-6])),
+                "fraclake": (("lat", "lon"), np.zeros((ni, nj))),
+                "gwettop": (("lat", "lon"), np.full((ni, nj), 0.1)),
+                "oro": (("lat", "lon"), np.ones((ni, nj))),
+                "u10m": (("lat", "lon"), np.full((ni, nj), 5.0)),
+                "v10m": (("lat", "lon"), np.zeros((ni, nj))),
+                "du_src": (("lat", "lon"), np.ones((ni, nj))),
+            },
+            coords={**coords, **coords_bin},
         )
-        oro = xr.DataArray(np.ones((ni, nj)), coords=coords, dims=("lat", "lon"))
-        u10m = xr.DataArray(np.full((ni, nj), 5.0), coords=coords, dims=("lat", "lon"))
-        v10m = xr.DataArray(np.zeros((ni, nj)), coords=coords, dims=("lat", "lon"))
-        du_src = xr.DataArray(np.ones((ni, nj)), coords=coords, dims=("lat", "lon"))
 
         emissions = pyfengsha.DustEmissionGOCART2G_xr(
-            radius, fraclake, gwettop, oro, u10m, v10m, 1.0e-9, du_src, 9.81
+            ds=ds, Ch_DU=1.0e-9, grav=9.81
         )
 
         self.assertEqual(emissions.shape, (ni, nj, nbins))
-        self.assertTrue((emissions > 0).all())
+        self.assertTrue((emissions.values > 0).all())
 
 
 if __name__ == "__main__":
