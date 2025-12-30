@@ -1,5 +1,5 @@
-import xarray as xr
 import datetime
+import xarray as xr
 from .fengsha import dust_emission_fengsha, dust_emission_gocart2g
 
 
@@ -161,43 +161,80 @@ def DustEmissionFENGSHA_xr(
 
 
 def DustEmissionGOCART2G_xr(
-    radius: xr.DataArray,
-    fraclake: xr.DataArray,
-    gwettop: xr.DataArray,
-    oro: xr.DataArray,
-    u10m: xr.DataArray,
-    v10m: xr.DataArray,
-    Ch_DU: float,
-    du_src: xr.DataArray,
-    grav: float,
+    ds: xr.Dataset, Ch_DU: float, grav: float
 ) -> xr.DataArray:
     """
-    Xarray wrapper for DustEmissionGOCART2G.
+    Xarray wrapper for the GOCART2G dust emission scheme.
 
-    Args:
-        radius: Particle radii (bin).
-        fraclake: Fraction of lake coverage (lat, lon).
-        gwettop: Surface wetness (lat, lon).
-        oro: Land mask (lat, lon).
-        u10m: 10m u-wind component (lat, lon).
-        v10m: 10m v-wind component (lat, lon).
-        Ch_DU: Dust emission coefficient.
-        du_src: Dust source function (lat, lon).
-        grav: Gravity.
+    This function calculates dust emissions based on a set of input variables
+    contained within a single xarray.Dataset. It preserves input coordinates
+    and updates the metadata to track data provenance.
 
-    Returns:
-        Dust emission flux (lat, lon, bin).
+    Parameters
+    ----------
+    ds : xr.Dataset
+        An xarray Dataset containing the following required variables:
+        - radius: Particle radii (bin).
+        - fraclake: Fraction of lake coverage (lat, lon).
+        - gwettop: Surface wetness (lat, lon).
+        - oro: Land mask (lat, lon).
+        - u10m: 10m u-wind component (lat, lon).
+        - v10m: 10m v-wind component (lat, lon).
+        - du_src: Dust source function (lat, lon).
+    Ch_DU : float
+        Dust emission coefficient.
+    grav : float
+        Gravity.
+
+    Returns
+    -------
+    xr.DataArray
+        A DataArray containing the calculated dust emission flux, with
+        dimensions (lat, lon, bin). The coordinates are preserved from the
+        input Dataset and a history attribute is added.
+
+    Examples
+    --------
+    >>> import xarray as xr
+    >>> import numpy as np
+    >>> # Create a sample dataset (replace with real data)
+    >>> ds = xr.Dataset({
+    ...     'radius': (('bin',), np.array([0.1, 0.5, 1.0])),
+    ...     'fraclake': (('lat', 'lon'), np.zeros((10, 20))),
+    ...     'gwettop': (('lat', 'lon'), np.full((10, 20), 0.1)),
+    ...     'oro': (('lat', 'lon'), np.ones((10, 20))),
+    ...     'u10m': (('lat', 'lon'), np.full((10, 20), 5.0)),
+    ...     'v10m': (('lat', 'lon'), np.full((10, 20), 2.0)),
+    ...     'du_src': (('lat', 'lon'), np.ones((10, 20))),
+    ... }, coords={'lat': np.arange(10), 'lon': np.arange(20), 'bin': np.arange(3)})
+    >>> # Run the GOCART2G model
+    >>> emissions = DustEmissionGOCART2G_xr(
+    ...     ds=ds.chunk({'lat': 5, 'lon': 10}),
+    ...     Ch_DU=1.0, grav=9.81
+    ... )
+    >>> print(emissions.shape)
+    (10, 20, 3)
+    >>> print('history' in emissions.attrs)
+    True
     """
-    return xr.apply_ufunc(
+    # Create a new history attribute
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    history = f"{timestamp}: Dust emissions calculated using the GOCART2G scheme."
+
+    # Prepend to existing history if it exists
+    if "history" in ds.attrs:
+        history = f"{history}\n{ds.attrs['history']}"
+
+    result = xr.apply_ufunc(
         dust_emission_gocart2g,
-        radius,
-        fraclake,
-        gwettop,
-        oro,
-        u10m,
-        v10m,
+        ds["radius"],
+        ds["fraclake"],
+        ds["gwettop"],
+        ds["oro"],
+        ds["u10m"],
+        ds["v10m"],
         Ch_DU,
-        du_src,
+        ds["du_src"],
         grav,
         input_core_dims=[
             ["bin"],
@@ -215,3 +252,6 @@ def DustEmissionGOCART2G_xr(
         output_dtypes=[float],
         dask_gufunc_kwargs={"allow_rechunk": True},
     )
+
+    result.attrs["history"] = history
+    return result
