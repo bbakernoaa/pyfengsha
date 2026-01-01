@@ -4,6 +4,7 @@ NOAA/ARL FENGSHA dust emission model and GOCART2G scheme implementations.
 
 import numpy as np
 import math
+from numpy.typing import NDArray
 
 from numba import jit, vectorize
 
@@ -353,8 +354,10 @@ def _kok_aerosol_distribution_ufunc(radius: float, r_low: float, r_up: float) ->
 
 
 def kok_aerosol_distribution(
-    radius: np.ndarray, r_low: np.ndarray, r_up: np.ndarray
-) -> np.ndarray:
+    radius: NDArray[np.float64],
+    r_low: NDArray[np.float64],
+    r_up: NDArray[np.float64],
+) -> NDArray[np.float64]:
     """
     Computes Kok's dust size aerosol distribution (Vectorized).
 
@@ -364,20 +367,21 @@ def kok_aerosol_distribution(
 
     Parameters
     ----------
-    radius : np.ndarray
+    radius : NDArray[np.float64]
         1D array of particle radii for each bin [m].
-    r_low : np.ndarray
+    r_low : NDArray[np.float64]
         1D array of the lower bound radius for each bin [m].
-    r_up : np.ndarray
+    r_up : NDArray[np.float64]
         1D array of the upper bound radius for each bin [m].
 
     Returns
     -------
-    np.ndarray
+    NDArray[np.float64]
         1D array of the normalized volume distribution for each bin (unitless).
 
     Examples
     --------
+    >>> import numpy as np
     >>> radius = np.array([0.1, 0.5, 1.0])
     >>> r_low = np.array([0.05, 0.45, 0.95])
     >>> r_up = np.array([0.15, 0.55, 1.05])
