@@ -94,9 +94,7 @@ class TestFengshaXarray(unittest.TestCase):
             coords={**coords, **coords_bin},
         )
 
-        emissions = pyfengsha.DustEmissionGOCART2G_xr(
-            ds=ds, Ch_DU=1.0e-9, grav=9.81
-        )
+        emissions = pyfengsha.DustEmissionGOCART2G_xr(ds=ds, Ch_DU=1.0e-9, grav=9.81)
 
         self.assertEqual(emissions.shape, (ni, nj, nbins))
         self.assertTrue((emissions.values > 0).all())
