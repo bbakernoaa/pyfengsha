@@ -2,53 +2,54 @@
 NOAA/ARL FENGSHA dust emission model and GOCART2G scheme implementations.
 """
 
-import numpy as np
 import math
 
+import numpy as np
 from numba import jit, vectorize
+from numpy.typing import NDArray
 
 # --- Constants ---
 # Using descriptive names for physical and model constants.
 # No more magic numbers.
 
 # Physical Constants
-G_ACCEL_CMS2 = 9.81 * 100.0  # Gravity in cm/s^2
+G_ACCEL_CMS2: float = 9.81 * 100.0  # Gravity in cm/s^2
 
 # Soil and Water Properties
-SOIL_DENSITY_GCM3 = 2.65
-WATER_DENSITY_GCM3 = 1.0
-GOCART_PARTICLE_DENSITY_GCM3 = 1.7
+SOIL_DENSITY_GCM3: float = 2.65
+WATER_DENSITY_GCM3: float = 1.0
+GOCART_PARTICLE_DENSITY_GCM3: float = 1.7
 
 # Fecan Moisture Correction Parameters
-FECAN_CLAY_COEFF_A = 14.0
-FECAN_CLAY_COEFF_B = 17.0
-FECAN_MOISTURE_COEFF_A = 1.21
-FECAN_MOISTURE_COEFF_B = 0.68
+FECAN_CLAY_COEFF_A: float = 14.0
+FECAN_CLAY_COEFF_B: float = 17.0
+FECAN_MOISTURE_COEFF_A: float = 1.21
+FECAN_MOISTURE_COEFF_B: float = 0.68
 
 # Drag Partition Scheme Constants (Darmenova)
-DRAG_MIN_VAL = 1.0e-3
-SIGB_D = 1.0
-MB_D = 0.5
-BETAB_D = 90.0
-SIGV_D = 1.45
-MV_D = 0.16
-BETAV_D = 202.0
+DRAG_MIN_VAL: float = 1.0e-3
+SIGB_D: float = 1.0
+MB_D: float = 0.5
+BETAB_D: float = 90.0
+SIGV_D: float = 1.45
+MV_D: float = 0.16
+BETAV_D: float = 202.0
 
 # Drag Partition Scheme Constants (Leung)
-LAI_THRESHOLD_L = 0.33
-C_L = 4.8
-F0_L = 0.32
-SIGB_L = 1.0
-MB_L = 0.5
-BETAB_L = 90.0
-MIN_FEFF_L = 1.0e-5
-MAX_FEFF_L = 1.0
+LAI_THRESHOLD_L: float = 0.33
+C_L: float = 4.8
+F0_L: float = 0.32
+SIGB_L: float = 1.0
+MB_L: float = 0.5
+BETAB_L: float = 90.0
+MIN_FEFF_L: float = 1.0e-5
+MAX_FEFF_L: float = 1.0
 
 # Thresholds and masks for main emission calculation
-SSM_THRESHOLD = 1.0e-02
-VEG_THRESHOLD_FENGSHA = 0.4
-LAND_MASK_VALUE = 1.0
-MAX_RDRAG_FENGSHA = 0.3
+SSM_THRESHOLD: float = 1.0e-02
+VEG_THRESHOLD_FENGSHA: float = 0.4
+LAND_MASK_VALUE: float = 1.0
+MAX_RDRAG_FENGSHA: float = 0.3
 
 # --- Helper Functions ---
 
@@ -353,8 +354,8 @@ def _kok_aerosol_distribution_ufunc(radius: float, r_low: float, r_up: float) ->
 
 
 def kok_aerosol_distribution(
-    radius: np.ndarray, r_low: np.ndarray, r_up: np.ndarray
-) -> np.ndarray:
+    radius: NDArray, r_low: NDArray, r_up: NDArray
+) -> NDArray:
     """
     Computes Kok's dust size aerosol distribution (Vectorized).
 
@@ -364,16 +365,16 @@ def kok_aerosol_distribution(
 
     Parameters
     ----------
-    radius : np.ndarray
+    radius : NDArray
         1D array of particle radii for each bin [m].
-    r_low : np.ndarray
+    r_low : NDArray
         1D array of the lower bound radius for each bin [m].
-    r_up : np.ndarray
+    r_up : NDArray
         1D array of the upper bound radius for each bin [m].
 
     Returns
     -------
-    np.ndarray
+    NDArray
         1D array of the normalized volume distribution for each bin (unitless).
 
     Examples
@@ -590,21 +591,21 @@ def leung_drag_partition(Lc: float, lai: float, gvf: float, thresh: float) -> fl
 
 
 def _darmenova_drag_partition_vectorized(
-    rdrag: np.ndarray, vegfrac: np.ndarray
-) -> np.ndarray:
+    rdrag: NDArray, vegfrac: NDArray
+) -> NDArray:
     """
     Vectorized implementation of the Darmenova drag partition scheme.
 
     Parameters
     ----------
-    rdrag : np.ndarray
+    rdrag : NDArray
         1D array of the drag partition parameter for valid cells.
-    vegfrac : np.ndarray
+    vegfrac : NDArray
         1D array of the vegetation fraction for valid cells.
 
     Returns
     -------
-    np.ndarray
+    NDArray
         1D array of the calculated drag partition factor.
     """
     # Vectorized darmenova_drag_partition logic
@@ -639,23 +640,23 @@ def _darmenova_drag_partition_vectorized(
 
 
 def _leung_drag_partition_vectorized(
-    rdrag: np.ndarray, vegfrac: np.ndarray, lai: np.ndarray
-) -> np.ndarray:
+    rdrag: NDArray, vegfrac: NDArray, lai: NDArray
+) -> NDArray:
     """
     Vectorized implementation of the Leung drag partition scheme.
 
     Parameters
     ----------
-    rdrag : np.ndarray
+    rdrag : NDArray
         1D array of the drag partition parameter for valid cells.
-    vegfrac : np.ndarray
+    vegfrac : NDArray
         1D array of the vegetation fraction for valid cells.
-    lai : np.ndarray
+    lai : NDArray
         1D array of the Leaf Area Index for valid cells.
 
     Returns
     -------
-    np.ndarray
+    NDArray
         1D array of the calculated drag partition factor.
     """
     # Vectorized leung_drag_partition logic
@@ -689,8 +690,8 @@ def _leung_drag_partition_vectorized(
 
 
 def _calculate_drag_partition(
-    rdrag: np.ndarray, vegfrac: np.ndarray, lai: np.ndarray, drag_opt: int
-) -> np.ndarray:
+    rdrag: NDArray, vegfrac: NDArray, lai: NDArray, drag_opt: int
+) -> NDArray:
     """
     Calculates the drag partition factor (R) based on the selected scheme.
 
@@ -699,18 +700,18 @@ def _calculate_drag_partition(
 
     Parameters
     ----------
-    rdrag : np.ndarray
+    rdrag : NDArray
         1D array of the drag partition parameter for valid cells.
-    vegfrac : np.ndarray
+    vegfrac : NDArray
         1D array of the vegetation fraction for valid cells.
-    lai : np.ndarray
+    lai : NDArray
         1D array of the Leaf Area Index for valid cells.
     drag_opt : int
         Drag option (1, 2, or 3).
 
     Returns
     -------
-    np.ndarray
+    NDArray
         1D array of the calculated drag partition factor (R) for valid cells.
     """
     if drag_opt == 2:
@@ -723,28 +724,28 @@ def _calculate_drag_partition(
 
 
 def dust_emission_fengsha(
-    fraclake: np.ndarray,
-    fracsnow: np.ndarray,
-    oro: np.ndarray,
-    slc: np.ndarray,
-    clay: np.ndarray,
-    sand: np.ndarray,
-    ssm: np.ndarray,
-    rdrag: np.ndarray,
-    airdens: np.ndarray,
-    ustar: np.ndarray,
-    vegfrac: np.ndarray,
-    lai: np.ndarray,
-    uthrs: np.ndarray,
+    fraclake: NDArray,
+    fracsnow: NDArray,
+    oro: NDArray,
+    slc: NDArray,
+    clay: NDArray,
+    sand: NDArray,
+    ssm: NDArray,
+    rdrag: NDArray,
+    airdens: NDArray,
+    ustar: NDArray,
+    vegfrac: NDArray,
+    lai: NDArray,
+    uthrs: NDArray,
     alpha: float,
     gamma: float,
     kvhmax: float,
     grav: float,
-    distribution: np.ndarray,
+    distribution: NDArray,
     drylimit_factor: float,
     moist_correct: float,
     drag_opt: int,
-) -> np.ndarray:
+) -> NDArray:
     """
     Compute dust emissions using NOAA/ARL FENGSHA model (Vectorized).
 
@@ -754,31 +755,31 @@ def dust_emission_fengsha(
 
     Parameters
     ----------
-    fraclake : np.ndarray
+    fraclake : NDArray
         2D array of the fraction of lake coverage.
-    fracsnow : np.ndarray
+    fracsnow : NDArray
         2D array of the fraction of snow coverage.
-    oro : np.ndarray
+    oro : NDArray
         2D array of the land/water mask (1 for land).
-    slc : np.ndarray
+    slc : NDArray
         2D array of the soil liquid content.
-    clay : np.ndarray
+    clay : NDArray
         2D array of the clay fraction.
-    sand : np.ndarray
+    sand : NDArray
         2D array of the sand fraction.
-    ssm : np.ndarray
+    ssm : NDArray
         2D array of the surface soil moisture.
-    rdrag : np.ndarray
+    rdrag : NDArray
         2D array of the drag partition parameter.
-    airdens : np.ndarray
+    airdens : NDArray
         2D array of the air density.
-    ustar : np.ndarray
+    ustar : NDArray
         2D array of the friction velocity.
-    vegfrac : np.ndarray
+    vegfrac : NDArray
         2D array of the vegetation fraction.
-    lai : np.ndarray
+    lai : NDArray
         2D array of the Leaf Area Index.
-    uthrs : np.ndarray
+    uthrs : NDArray
         2D array of the threshold velocity.
     alpha : float
         Tuning parameter.
@@ -788,7 +789,7 @@ def dust_emission_fengsha(
         Max KVH ratio.
     grav : float
         Gravity acceleration.
-    distribution : np.ndarray
+    distribution : NDArray
         1D array of the size distribution per bin.
     drylimit_factor : float
         Dry limit factor for moisture correction.
@@ -799,7 +800,7 @@ def dust_emission_fengsha(
 
     Returns
     -------
-    np.ndarray
+    NDArray
         3D array of emissions of shape (ni, nj, nbins).
     """
     # --- Create a mask for valid grid cells to perform calculations on ---
@@ -892,16 +893,16 @@ def dust_emission_fengsha(
 
 
 def dust_emission_gocart2g(
-    radius: np.ndarray,
-    fraclake: np.ndarray,
-    gwettop: np.ndarray,
-    oro: np.ndarray,
-    u10m: np.ndarray,
-    v10m: np.ndarray,
+    radius: NDArray,
+    fraclake: NDArray,
+    gwettop: NDArray,
+    oro: NDArray,
+    u10m: NDArray,
+    v10m: NDArray,
     Ch_DU: float,
-    du_src: np.ndarray,
+    du_src: NDArray,
     grav: float,
-) -> np.ndarray:
+) -> NDArray:
     """
     Computes dust emissions using GOCART2G scheme (Vectorized).
 
@@ -911,28 +912,28 @@ def dust_emission_gocart2g(
 
     Parameters
     ----------
-    radius: np.ndarray
+    radius: NDArray
         1D array of particle radii (nbins,).
-    fraclake: np.ndarray
+    fraclake: NDArray
         2D array of the fraction of lake coverage (ni, nj).
-    gwettop: np.ndarray
+    gwettop: NDArray
         2D array of surface wetness (ni, nj).
-    oro: np.ndarray
+    oro: NDArray
         2D array of the land/water mask (1 for land) (ni, nj).
-    u10m: np.ndarray
+    u10m: NDArray
         2D array of the 10m u-wind component (ni, nj).
-    v10m: np.ndarray
+    v10m: NDArray
         2D array of the 10m v-wind component (ni, nj).
     Ch_DU: float
         Dust emission coefficient.
-    du_src: np.ndarray
+    du_src: NDArray
         2D array of the dust source function (ni, nj).
     grav: float
         Gravity acceleration.
 
     Returns
     -------
-    np.ndarray
+    NDArray
         3D array of emissions of shape (ni, nj, nbins).
     """
     # --- Pre-calculations and constants ---
