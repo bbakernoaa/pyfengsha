@@ -160,9 +160,7 @@ def DustEmissionFENGSHA_xr(
     return result
 
 
-def DustEmissionGOCART2G_xr(
-    ds: xr.Dataset, Ch_DU: float, grav: float
-) -> xr.DataArray:
+def DustEmissionGOCART2G_xr(ds: xr.Dataset, Ch_DU: float, grav: float) -> xr.DataArray:
     """
     Xarray wrapper for the GOCART2G dust emission scheme.
 

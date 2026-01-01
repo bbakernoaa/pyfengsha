@@ -20,20 +20,59 @@ class TestFENGSHAXarray(unittest.TestCase):
         dist_data = np.array([0.1, 0.2, 0.7])
         self.ds = xr.Dataset(
             {
-                "fraclake": (("lat", "lon"), da.zeros((self.ni, self.nj), chunks=(5, 10))),
-                "fracsnow": (("lat", "lon"), da.zeros((self.ni, self.nj), chunks=(5, 10))),
+                "fraclake": (
+                    ("lat", "lon"),
+                    da.zeros((self.ni, self.nj), chunks=(5, 10)),
+                ),
+                "fracsnow": (
+                    ("lat", "lon"),
+                    da.zeros((self.ni, self.nj), chunks=(5, 10)),
+                ),
                 "oro": (("lat", "lon"), da.ones((self.ni, self.nj), chunks=(5, 10))),
-                "slc": (("lat", "lon"), da.full((self.ni, self.nj), 0.2, chunks=(5, 10))),
-                "clay": (("lat", "lon"), da.full((self.ni, self.nj), 0.1, chunks=(5, 10))),
-                "sand": (("lat", "lon"), da.full((self.ni, self.nj), 0.8, chunks=(5, 10))),
-                "ssm": (("lat", "lon"), da.full((self.ni, self.nj), 0.9, chunks=(5, 10))),
-                "rdrag": (("lat", "lon"), da.full((self.ni, self.nj), 0.95, chunks=(5, 10))),
-                "airdens": (("lat", "lon"), da.full((self.ni, self.nj), 1.2, chunks=(5, 10))),
-                "ustar": (("lat", "lon"), da.full((self.ni, self.nj), 0.4, chunks=(5, 10))),
-                "vegfrac": (("lat", "lon"), da.full((self.ni, self.nj), 0.1, chunks=(5, 10))),
-                "lai": (("lat", "lon"), da.full((self.ni, self.nj), 0.2, chunks=(5, 10))),
-                "uthrs": (("lat", "lon"), da.full((self.ni, self.nj), 0.25, chunks=(5, 10))),
-                "distribution": (("bin",), da.from_array(dist_data, chunks=(self.nbins,))),
+                "slc": (
+                    ("lat", "lon"),
+                    da.full((self.ni, self.nj), 0.2, chunks=(5, 10)),
+                ),
+                "clay": (
+                    ("lat", "lon"),
+                    da.full((self.ni, self.nj), 0.1, chunks=(5, 10)),
+                ),
+                "sand": (
+                    ("lat", "lon"),
+                    da.full((self.ni, self.nj), 0.8, chunks=(5, 10)),
+                ),
+                "ssm": (
+                    ("lat", "lon"),
+                    da.full((self.ni, self.nj), 0.9, chunks=(5, 10)),
+                ),
+                "rdrag": (
+                    ("lat", "lon"),
+                    da.full((self.ni, self.nj), 0.95, chunks=(5, 10)),
+                ),
+                "airdens": (
+                    ("lat", "lon"),
+                    da.full((self.ni, self.nj), 1.2, chunks=(5, 10)),
+                ),
+                "ustar": (
+                    ("lat", "lon"),
+                    da.full((self.ni, self.nj), 0.4, chunks=(5, 10)),
+                ),
+                "vegfrac": (
+                    ("lat", "lon"),
+                    da.full((self.ni, self.nj), 0.1, chunks=(5, 10)),
+                ),
+                "lai": (
+                    ("lat", "lon"),
+                    da.full((self.ni, self.nj), 0.2, chunks=(5, 10)),
+                ),
+                "uthrs": (
+                    ("lat", "lon"),
+                    da.full((self.ni, self.nj), 0.25, chunks=(5, 10)),
+                ),
+                "distribution": (
+                    ("bin",),
+                    da.from_array(dist_data, chunks=(self.nbins,)),
+                ),
             },
             coords=self.coords,
         )
@@ -73,11 +112,23 @@ class TestGOCART2GXarray(unittest.TestCase):
         self.ds = xr.Dataset(
             {
                 "radius": (("bin",), da.from_array(radius_data, chunks=(self.nbins,))),
-                "fraclake": (("lat", "lon"), da.zeros((self.ni, self.nj), chunks=(5, 10))),
-                "gwettop": (("lat", "lon"), da.full((self.ni, self.nj), 0.1, chunks=(5, 10))),
+                "fraclake": (
+                    ("lat", "lon"),
+                    da.zeros((self.ni, self.nj), chunks=(5, 10)),
+                ),
+                "gwettop": (
+                    ("lat", "lon"),
+                    da.full((self.ni, self.nj), 0.1, chunks=(5, 10)),
+                ),
                 "oro": (("lat", "lon"), da.ones((self.ni, self.nj), chunks=(5, 10))),
-                "u10m": (("lat", "lon"), da.full((self.ni, self.nj), 5.0, chunks=(5, 10))),
-                "v10m": (("lat", "lon"), da.full((self.ni, self.nj), 2.0, chunks=(5, 10))),
+                "u10m": (
+                    ("lat", "lon"),
+                    da.full((self.ni, self.nj), 5.0, chunks=(5, 10)),
+                ),
+                "v10m": (
+                    ("lat", "lon"),
+                    da.full((self.ni, self.nj), 2.0, chunks=(5, 10)),
+                ),
                 "du_src": (("lat", "lon"), da.ones((self.ni, self.nj), chunks=(5, 10))),
             },
             coords=self.coords,
@@ -86,9 +137,7 @@ class TestGOCART2GXarray(unittest.TestCase):
 
     def test_gocart2g_dataset_input_and_provenance(self):
         """Test the refactored GOCART2G function with a Dataset and check provenance."""
-        emissions = DustEmissionGOCART2G_xr(
-            ds=self.ds, Ch_DU=1.0e-5, grav=9.81
-        )
+        emissions = DustEmissionGOCART2G_xr(ds=self.ds, Ch_DU=1.0e-5, grav=9.81)
 
         # 1. Verify Output Type and Shape
         self.assertIsInstance(emissions, xr.DataArray)

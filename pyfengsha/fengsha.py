@@ -3,7 +3,6 @@ NOAA/ARL FENGSHA dust emission model and GOCART2G scheme implementations.
 """
 
 import math
-from numpy.typing import NDArray
 
 import numpy as np
 from numba import jit, vectorize
@@ -347,18 +346,11 @@ def _kok_aerosol_distribution_ufunc(radius: float, r_low: float, r_up: float) ->
 
     # Numba compatible erf
     return (
-        diameter
-        * (1.0 + math.erf(erf_arg))
-        * np.exp(-(dlam**3))
-        * np.log(r_up / r_low)
+        diameter * (1.0 + math.erf(erf_arg)) * np.exp(-(dlam**3)) * np.log(r_up / r_low)
     )
 
 
-def kok_aerosol_distribution(
-    radius: NDArray[np.float64],
-    r_low: NDArray[np.float64],
-    r_up: NDArray[np.float64],
-) -> NDArray[np.float64]:
+def kok_aerosol_distribution(radius: NDArray, r_low: NDArray, r_up: NDArray) -> NDArray:
     """
     Computes Kok's dust size aerosol distribution (Vectorized).
 
@@ -368,21 +360,20 @@ def kok_aerosol_distribution(
 
     Parameters
     ----------
-    radius : NDArray[np.float64]
+    radius : NDArray
         1D array of particle radii for each bin [m].
-    r_low : NDArray[np.float64]
+    r_low : NDArray
         1D array of the lower bound radius for each bin [m].
-    r_up : NDArray[np.float64]
+    r_up : NDArray
         1D array of the upper bound radius for each bin [m].
 
     Returns
     -------
-    NDArray[np.float64]
+    NDArray
         1D array of the normalized volume distribution for each bin (unitless).
 
     Examples
     --------
-    >>> import numpy as np
     >>> radius = np.array([0.1, 0.5, 1.0])
     >>> r_low = np.array([0.05, 0.45, 0.95])
     >>> r_up = np.array([0.15, 0.55, 1.05])
@@ -594,9 +585,7 @@ def leung_drag_partition(Lc: float, lai: float, gvf: float, thresh: float) -> fl
     return feff if MIN_FEFF_L <= feff <= MAX_FEFF_L else MIN_FEFF_L
 
 
-def _darmenova_drag_partition_vectorized(
-    rdrag: NDArray, vegfrac: NDArray
-) -> NDArray:
+def _darmenova_drag_partition_vectorized(rdrag: NDArray, vegfrac: NDArray) -> NDArray:
     """
     Vectorized implementation of the Darmenova drag partition scheme.
 
