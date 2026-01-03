@@ -24,7 +24,7 @@ def DustEmissionFENGSHA_xr(
     ----------
     ds : xr.Dataset
         An xarray Dataset containing the following required variables:
-        - fracke: Fraction of lake coverage
+        - fraclake: Fraction of lake coverage
         - fracsnow: Fraction of snow coverage
         - oro: Land/water mask
         - slc: Soil liquid content
@@ -103,8 +103,11 @@ def DustEmissionFENGSHA_xr(
     if "history" in ds.attrs:
         history = f"{history}\n{ds.attrs['history']}"
 
-    result = xr.apply_ufunc(
-        dust_emission_fengsha,
+    # Define the set of possible core dimensions for the underlying NumPy function
+    known_core_dims = {"lat", "lon", "bin"}
+
+    # Gather all input arguments for apply_ufunc
+    fengsha_args = [
         ds["fraclake"],
         ds["fracsnow"],
         ds["oro"],
@@ -126,31 +129,21 @@ def DustEmissionFENGSHA_xr(
         drylimit_factor,
         moist_correct,
         drag_opt,
-        input_core_dims=[
-            ["lat", "lon"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            [],
-            [],
-            [],
-            [],
-            ["bin"],
-            [],
-            [],
-            [],
-        ],
+    ]
+
+    # Dynamically generate input_core_dims by intersecting with known_core_dims
+    input_core_dims = [
+        [dim for dim in arg.dims if dim in known_core_dims]
+        if isinstance(arg, xr.DataArray)
+        else []
+        for arg in fengsha_args
+    ]
+
+    result = xr.apply_ufunc(
+        dust_emission_fengsha,
+        *fengsha_args,
+        input_core_dims=input_core_dims,
         output_core_dims=[["lat", "lon", "bin"]],
-        vectorize=True,
         dask="parallelized",
         output_dtypes=[float],
         dask_gufunc_kwargs={"allow_rechunk": True},
@@ -223,8 +216,10 @@ def DustEmissionGOCART2G_xr(ds: xr.Dataset, Ch_DU: float, grav: float) -> xr.Dat
     if "history" in ds.attrs:
         history = f"{history}\n{ds.attrs['history']}"
 
-    result = xr.apply_ufunc(
-        dust_emission_gocart2g,
+    # Define the set of possible core dimensions
+    known_core_dims = {"lat", "lon", "bin"}
+
+    gocart_args = [
         ds["radius"],
         ds["fraclake"],
         ds["gwettop"],
@@ -234,17 +229,20 @@ def DustEmissionGOCART2G_xr(ds: xr.Dataset, Ch_DU: float, grav: float) -> xr.Dat
         Ch_DU,
         ds["du_src"],
         grav,
-        input_core_dims=[
-            ["bin"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            ["lat", "lon"],
-            [],
-            ["lat", "lon"],
-            [],
-        ],
+    ]
+
+    # Dynamically generate input_core_dims
+    input_core_dims = [
+        [dim for dim in arg.dims if dim in known_core_dims]
+        if isinstance(arg, xr.DataArray)
+        else []
+        for arg in gocart_args
+    ]
+
+    result = xr.apply_ufunc(
+        dust_emission_gocart2g,
+        *gocart_args,
+        input_core_dims=input_core_dims,
         output_core_dims=[["lat", "lon", "bin"]],
         dask="parallelized",
         output_dtypes=[float],

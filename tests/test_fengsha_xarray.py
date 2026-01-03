@@ -49,9 +49,10 @@ class TestFengshaXarray(unittest.TestCase):
 
         # Test with a time dimension
         nt = 2
-        ds_t = ds.expand_dims(time=np.arange(nt)).copy()
-        # Update ustar to be time-dependent
+        ds_t = ds.expand_dims(time=np.arange(nt)).copy(deep=True)
+        # Update ustar to be time-dependent, but keep distribution time-invariant
         ds_t["ustar"] = ds["ustar"].expand_dims(time=np.arange(nt))
+        ds_t["distribution"] = ds["distribution"]
 
         # Re-run with the time-aware dataset
         # Note: The underlying numpy function doesn't inherently handle the time dim,
