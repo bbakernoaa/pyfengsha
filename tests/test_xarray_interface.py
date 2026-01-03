@@ -1,4 +1,4 @@
-import unittest
+import pytest
 import numpy as np
 import xarray as xr
 import dask.array as da
@@ -7,165 +7,110 @@ from pyfengsha.xarray_interface import (
     DustEmissionGOCART2G_xr,
 )
 
-
-class TestFENGSHAXarray(unittest.TestCase):
-    def setUp(self):
-        """Set up a sample xarray.Dataset for FENGSHA testing."""
-        self.ni, self.nj, self.nbins = 10, 20, 3
-        self.coords = {
-            "lat": np.arange(self.ni),
-            "lon": np.arange(self.nj),
-            "bin": np.arange(self.nbins),
-        }
-        dist_data = np.array([0.1, 0.2, 0.7])
-        self.ds = xr.Dataset(
-            {
-                "fraclake": (
-                    ("lat", "lon"),
-                    da.zeros((self.ni, self.nj), chunks=(5, 10)),
-                ),
-                "fracsnow": (
-                    ("lat", "lon"),
-                    da.zeros((self.ni, self.nj), chunks=(5, 10)),
-                ),
-                "oro": (("lat", "lon"), da.ones((self.ni, self.nj), chunks=(5, 10))),
-                "slc": (
-                    ("lat", "lon"),
-                    da.full((self.ni, self.nj), 0.2, chunks=(5, 10)),
-                ),
-                "clay": (
-                    ("lat", "lon"),
-                    da.full((self.ni, self.nj), 0.1, chunks=(5, 10)),
-                ),
-                "sand": (
-                    ("lat", "lon"),
-                    da.full((self.ni, self.nj), 0.8, chunks=(5, 10)),
-                ),
-                "ssm": (
-                    ("lat", "lon"),
-                    da.full((self.ni, self.nj), 0.9, chunks=(5, 10)),
-                ),
-                "rdrag": (
-                    ("lat", "lon"),
-                    da.full((self.ni, self.nj), 0.95, chunks=(5, 10)),
-                ),
-                "airdens": (
-                    ("lat", "lon"),
-                    da.full((self.ni, self.nj), 1.2, chunks=(5, 10)),
-                ),
-                "ustar": (
-                    ("lat", "lon"),
-                    da.full((self.ni, self.nj), 0.4, chunks=(5, 10)),
-                ),
-                "vegfrac": (
-                    ("lat", "lon"),
-                    da.full((self.ni, self.nj), 0.1, chunks=(5, 10)),
-                ),
-                "lai": (
-                    ("lat", "lon"),
-                    da.full((self.ni, self.nj), 0.2, chunks=(5, 10)),
-                ),
-                "uthrs": (
-                    ("lat", "lon"),
-                    da.full((self.ni, self.nj), 0.25, chunks=(5, 10)),
-                ),
-                "distribution": (
-                    ("bin",),
-                    da.from_array(dist_data, chunks=(self.nbins,)),
-                ),
-            },
-            coords=self.coords,
-        )
-        self.ds.attrs["history"] = "2023-01-01T00:00:00Z: Initial dataset creation."
-
-    def test_fengsha_dataset_input_and_provenance(self):
-        """Test FENGSHA with a Dataset input and check for provenance."""
-        emissions = DustEmissionFENGSHA_xr(
-            ds=self.ds,
-            alpha=1.0,
-            gamma=1.0,
-            kvhmax=2.0e-4,
-            grav=9.81,
-            drylimit_factor=1.0,
-            moist_correct=1.0,
-            drag_opt=1,
-        )
-        self.assertIsInstance(emissions, xr.DataArray)
-        self.assertEqual(emissions.shape, (self.ni, self.nj, self.nbins))
-        self.assertIn("history", emissions.attrs)
-        self.assertIn("FENGSHA scheme", emissions.attrs["history"])
-        self.assertTrue(hasattr(emissions.data, "dask"))
-        computed_emissions = emissions.compute()
-        self.assertFalse(np.isnan(computed_emissions).any())
+# --- Constants for Test Dimensions ---
+NI, NJ, NBINS = 10, 20, 3
+CHUNK_SIZE = {"lat": 5, "lon": 10}
 
 
-class TestGOCART2GXarray(unittest.TestCase):
-    def setUp(self):
-        """Set up a sample xarray.Dataset for GOCART2G testing."""
-        self.ni, self.nj, self.nbins = 10, 20, 3
-        self.coords = {
-            "lat": np.arange(self.ni),
-            "lon": np.arange(self.nj),
-            "bin": np.arange(self.nbins),
-        }
-        radius_data = np.array([0.1, 0.5, 1.0])
-        self.ds = xr.Dataset(
-            {
-                "radius": (("bin",), da.from_array(radius_data, chunks=(self.nbins,))),
-                "fraclake": (
-                    ("lat", "lon"),
-                    da.zeros((self.ni, self.nj), chunks=(5, 10)),
-                ),
-                "gwettop": (
-                    ("lat", "lon"),
-                    da.full((self.ni, self.nj), 0.1, chunks=(5, 10)),
-                ),
-                "oro": (("lat", "lon"), da.ones((self.ni, self.nj), chunks=(5, 10))),
-                "u10m": (
-                    ("lat", "lon"),
-                    da.full((self.ni, self.nj), 5.0, chunks=(5, 10)),
-                ),
-                "v10m": (
-                    ("lat", "lon"),
-                    da.full((self.ni, self.nj), 2.0, chunks=(5, 10)),
-                ),
-                "du_src": (("lat", "lon"), da.ones((self.ni, self.nj), chunks=(5, 10))),
-            },
-            coords=self.coords,
-        )
-        self.ds.attrs["history"] = "2023-01-01T00:00:00Z: Initial GOCART2G dataset."
-
-    def test_gocart2g_dataset_input_and_provenance(self):
-        """Test the refactored GOCART2G function with a Dataset and check provenance."""
-        emissions = DustEmissionGOCART2G_xr(ds=self.ds, Ch_DU=1.0e-5, grav=9.81)
-
-        # 1. Verify Output Type and Shape
-        self.assertIsInstance(emissions, xr.DataArray)
-        self.assertEqual(emissions.shape, (self.ni, self.nj, self.nbins))
-        self.assertEqual(emissions.dims, ("lat", "lon", "bin"))
-
-        # 2. Verify Coordinates are Preserved
-        dummy_array = xr.DataArray(
-            da.zeros((self.ni, self.nj, self.nbins), chunks=(5, 10, self.nbins)),
-            coords=self.ds.coords,
-            dims=("lat", "lon", "bin"),
-        )
-        xr.testing.assert_allclose(
-            emissions.coords.to_dataset(), dummy_array.coords.to_dataset()
-        )
-
-        # 3. Verify Provenance (History) Tracking
-        self.assertIn("history", emissions.attrs)
-        self.assertTrue(emissions.attrs["history"].startswith("20"))
-        self.assertIn("GOCART2G scheme", emissions.attrs["history"])
-        self.assertIn(self.ds.attrs["history"], emissions.attrs["history"])
-
-        # 4. Verify Computation (Lazy Execution)
-        self.assertTrue(hasattr(emissions.data, "dask"))
-        computed_emissions = emissions.compute()
-        self.assertFalse(np.isnan(computed_emissions).any())
-        self.assertTrue((computed_emissions.values >= 0).all())
+@pytest.fixture(scope="module")
+def common_coords() -> dict:
+    """Pytest fixture for common coordinates used in test datasets."""
+    return {
+        "lat": np.arange(NI),
+        "lon": np.arange(NJ),
+        "bin": np.arange(NBINS),
+    }
 
 
-if __name__ == "__main__":
-    unittest.main()
+@pytest.fixture
+def fengsha_dataset(common_coords: dict) -> xr.Dataset:
+    """Pytest fixture to create a sample xarray.Dataset for FENGSHA testing."""
+    dist_data = np.array([0.1, 0.2, 0.7])
+    ds = xr.Dataset(
+        {
+            "fraclake": (("lat", "lon"), da.zeros((NI, NJ), chunks=CHUNK_SIZE)),
+            "fracsnow": (("lat", "lon"), da.zeros((NI, NJ), chunks=CHUNK_SIZE)),
+            "oro": (("lat", "lon"), da.ones((NI, NJ), chunks=CHUNK_SIZE)),
+            "slc": (("lat", "lon"), da.full((NI, NJ), 0.2, chunks=CHUNK_SIZE)),
+            "clay": (("lat", "lon"), da.full((NI, NJ), 0.1, chunks=CHUNK_SIZE)),
+            "sand": (("lat", "lon"), da.full((NI, NJ), 0.8, chunks=CHUNK_SIZE)),
+            "ssm": (("lat", "lon"), da.full((NI, NJ), 0.9, chunks=CHUNK_SIZE)),
+            "rdrag": (("lat", "lon"), da.full((NI, NJ), 0.95, chunks=CHUNK_SIZE)),
+            "airdens": (("lat", "lon"), da.full((NI, NJ), 1.2, chunks=CHUNK_SIZE)),
+            "ustar": (("lat", "lon"), da.full((NI, NJ), 0.4, chunks=CHUNK_SIZE)),
+            "vegfrac": (("lat", "lon"), da.full((NI, NJ), 0.1, chunks=CHUNK_SIZE)),
+            "lai": (("lat", "lon"), da.full((NI, NJ), 0.2, chunks=CHUNK_SIZE)),
+            "uthrs": (("lat", "lon"), da.full((NI, NJ), 0.25, chunks=CHUNK_SIZE)),
+            "distribution": (("bin",), da.from_array(dist_data, chunks=(NBINS,))),
+        },
+        coords=common_coords,
+    )
+    ds.attrs["history"] = "2023-01-01T00:00:00Z: Initial dataset creation."
+    return ds
+
+
+@pytest.fixture
+def gocart2g_dataset(common_coords: dict) -> xr.Dataset:
+    """Pytest fixture to create a sample xarray.Dataset for GOCART2G testing."""
+    radius_data = np.array([0.1, 0.5, 1.0])
+    ds = xr.Dataset(
+        {
+            "radius": (("bin",), da.from_array(radius_data, chunks=(NBINS,))),
+            "fraclake": (("lat", "lon"), da.zeros((NI, NJ), chunks=CHUNK_SIZE)),
+            "gwettop": (("lat", "lon"), da.full((NI, NJ), 0.1, chunks=CHUNK_SIZE)),
+            "oro": (("lat", "lon"), da.ones((NI, NJ), chunks=CHUNK_SIZE)),
+            "u10m": (("lat", "lon"), da.full((NI, NJ), 5.0, chunks=CHUNK_SIZE)),
+            "v10m": (("lat", "lon"), da.full((NI, NJ), 2.0, chunks=CHUNK_SIZE)),
+            "du_src": (("lat", "lon"), da.ones((NI, NJ), chunks=CHUNK_SIZE)),
+        },
+        coords=common_coords,
+    )
+    ds.attrs["history"] = "2023-01-01T00:00:00Z: Initial GOCART2G dataset."
+    return ds
+
+
+def test_fengsha_dataset_input_and_provenance(fengsha_dataset: xr.Dataset):
+    """Test FENGSHA with a Dataset input and check for provenance."""
+    emissions = DustEmissionFENGSHA_xr(
+        ds=fengsha_dataset,
+        alpha=1.0,
+        gamma=1.0,
+        kvhmax=2.0e-4,
+        grav=9.81,
+        drylimit_factor=1.0,
+        moist_correct=1.0,
+        drag_opt=1,
+    )
+    assert isinstance(emissions, xr.DataArray)
+    assert emissions.shape == (NI, NJ, NBINS)
+    assert "history" in emissions.attrs
+    assert "FENGSHA scheme" in emissions.attrs["history"]
+    assert hasattr(emissions.data, "dask")
+
+    computed_emissions = emissions.compute()
+    assert not np.isnan(computed_emissions).any()
+
+
+def test_gocart2g_dataset_input_and_provenance(gocart2g_dataset: xr.Dataset):
+    """Test GOCART2G with a Dataset input and check provenance."""
+    emissions = DustEmissionGOCART2G_xr(ds=gocart2g_dataset, Ch_DU=1.0e-5, grav=9.81)
+
+    # 1. Verify Output Type, Shape, and Dims
+    assert isinstance(emissions, xr.DataArray)
+    assert emissions.shape == (NI, NJ, NBINS)
+    assert emissions.dims == ("lat", "lon", "bin")
+
+    # 2. Verify Coordinates are Preserved
+    xr.testing.assert_equal(emissions.coords.to_dataset(), gocart2g_dataset.coords.to_dataset())
+
+    # 3. Verify Provenance (History) Tracking
+    assert "history" in emissions.attrs
+    assert emissions.attrs["history"].startswith("20")
+    assert "GOCART2G scheme" in emissions.attrs["history"]
+    assert gocart2g_dataset.attrs["history"] in emissions.attrs["history"]
+
+    # 4. Verify Computation (Lazy Execution and Valid Values)
+    assert hasattr(emissions.data, "dask")
+    computed_emissions = emissions.compute()
+    assert not np.isnan(computed_emissions).any()
+    assert (computed_emissions.values >= 0).all()
