@@ -4,3 +4,4 @@ xarray
 dask
 ruff
 scipy
+pytest
