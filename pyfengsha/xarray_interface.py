@@ -1,6 +1,88 @@
 import datetime
+import inspect
+from typing import Callable, Any, List, Set
 import xarray as xr
 from .fengsha import dust_emission_fengsha, dust_emission_gocart2g
+
+
+def _apply_ufunc_wrapper(
+    func: Callable,
+    ds: xr.Dataset,
+    known_core_dims: Set[str],
+    output_core_dims: List[List[str]],
+    history_message: str,
+    **kwargs: Any,
+) -> xr.DataArray:
+    """
+    Private wrapper to dynamically build and call xr.apply_ufunc.
+
+    Inspects the signature of the wrapped NumPy function (`func`) and
+    constructs the arguments for `apply_ufunc` by mapping function
+    parameters to variables in the input `xr.Dataset` or to the provided
+    `kwargs`.
+
+    Parameters
+    ----------
+    func : Callable
+        The underlying NumPy function to be wrapped (e.g., `dust_emission_fengsha`).
+    ds : xr.Dataset
+        The input dataset containing the necessary DataArray variables.
+    known_core_dims : Set[str]
+        A set of strings representing the core dimensions that the ufunc operates on.
+    output_core_dims : List[List[str]]
+        A list of lists of strings for the `output_core_dims` argument of `apply_ufunc`.
+    history_message : str
+        A message to be added to the output DataArray's history attribute.
+    **kwargs : Any
+        Additional scalar arguments required by the `func`.
+
+    Returns
+    -------
+    xr.DataArray
+        The result of the `apply_ufunc` call.
+    """
+    # Create a new history attribute
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    history = f"{timestamp}: {history_message}"
+
+    # Prepend to existing history if it exists
+    if "history" in ds.attrs:
+        history = f"{history}\n{ds.attrs['history']}"
+
+    # --- Dynamic Argument Building ---
+    sig = inspect.signature(func)
+    func_args = []
+    for param in sig.parameters.values():
+        if param.name in ds:
+            func_args.append(ds[param.name])
+        elif param.name in kwargs:
+            func_args.append(kwargs[param.name])
+        else:
+            # This provides a more informative error if an argument is missing
+            raise ValueError(
+                f"Missing required argument for '{func.__name__}': {param.name}"
+            )
+
+    # Dynamically generate input_core_dims by intersecting with known_core_dims
+    input_core_dims = [
+        [dim for dim in arg.dims if dim in known_core_dims]
+        if isinstance(arg, xr.DataArray)
+        else []
+        for arg in func_args
+    ]
+
+    result = xr.apply_ufunc(
+        func,
+        *func_args,
+        input_core_dims=input_core_dims,
+        output_core_dims=output_core_dims,
+        dask="parallelized",
+        output_dtypes=[float],
+        dask_gufunc_kwargs={"allow_rechunk": True},
+    )
+
+    result.attrs["history"] = history
+    return result
 
 
 def DustEmissionFENGSHA_xr(
@@ -23,7 +105,7 @@ def DustEmissionFENGSHA_xr(
     Parameters
     ----------
     ds : xr.Dataset
-        An xarray Dataset containing the following required variables:
+        An xarray Dataset containing the required variables:
         - fraclake: Fraction of lake coverage
         - fracsnow: Fraction of snow coverage
         - oro: Land/water mask
@@ -92,65 +174,23 @@ def DustEmissionFENGSHA_xr(
     >>> print('history' in emissions.attrs)
     True
     """
-    # Create a new history attribute
-    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    history = (
-        f"{timestamp}: Dust emissions calculated using the FENGSHA scheme."
-        f" (drag_opt={drag_opt})"
-    )
-
-    # Prepend to existing history if it exists
-    if "history" in ds.attrs:
-        history = f"{history}\n{ds.attrs['history']}"
-
-    # Define the set of possible core dimensions for the underlying NumPy function
-    known_core_dims = {"lat", "lon", "bin"}
-
-    # Gather all input arguments for apply_ufunc
-    fengsha_args = [
-        ds["fraclake"],
-        ds["fracsnow"],
-        ds["oro"],
-        ds["slc"],
-        ds["clay"],
-        ds["sand"],
-        ds["ssm"],
-        ds["rdrag"],
-        ds["airdens"],
-        ds["ustar"],
-        ds["vegfrac"],
-        ds["lai"],
-        ds["uthrs"],
-        alpha,
-        gamma,
-        kvhmax,
-        grav,
-        ds["distribution"],
-        drylimit_factor,
-        moist_correct,
-        drag_opt,
-    ]
-
-    # Dynamically generate input_core_dims by intersecting with known_core_dims
-    input_core_dims = [
-        [dim for dim in arg.dims if dim in known_core_dims]
-        if isinstance(arg, xr.DataArray)
-        else []
-        for arg in fengsha_args
-    ]
-
-    result = xr.apply_ufunc(
-        dust_emission_fengsha,
-        *fengsha_args,
-        input_core_dims=input_core_dims,
+    return _apply_ufunc_wrapper(
+        func=dust_emission_fengsha,
+        ds=ds,
+        known_core_dims={"lat", "lon", "bin"},
         output_core_dims=[["lat", "lon", "bin"]],
-        dask="parallelized",
-        output_dtypes=[float],
-        dask_gufunc_kwargs={"allow_rechunk": True},
+        history_message=(
+            f"Dust emissions calculated using the FENGSHA scheme (drag_opt={drag_opt})."
+        ),
+        # Pass scalar arguments to the wrapper via kwargs
+        alpha=alpha,
+        gamma=gamma,
+        kvhmax=kvhmax,
+        grav=grav,
+        drylimit_factor=drylimit_factor,
+        moist_correct=moist_correct,
+        drag_opt=drag_opt,
     )
-
-    result.attrs["history"] = history
-    return result
 
 
 def DustEmissionGOCART2G_xr(ds: xr.Dataset, Ch_DU: float, grav: float) -> xr.DataArray:
@@ -208,46 +248,13 @@ def DustEmissionGOCART2G_xr(ds: xr.Dataset, Ch_DU: float, grav: float) -> xr.Dat
     >>> print('history' in emissions.attrs)
     True
     """
-    # Create a new history attribute
-    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    history = f"{timestamp}: Dust emissions calculated using the GOCART2G scheme."
-
-    # Prepend to existing history if it exists
-    if "history" in ds.attrs:
-        history = f"{history}\n{ds.attrs['history']}"
-
-    # Define the set of possible core dimensions
-    known_core_dims = {"lat", "lon", "bin"}
-
-    gocart_args = [
-        ds["radius"],
-        ds["fraclake"],
-        ds["gwettop"],
-        ds["oro"],
-        ds["u10m"],
-        ds["v10m"],
-        Ch_DU,
-        ds["du_src"],
-        grav,
-    ]
-
-    # Dynamically generate input_core_dims
-    input_core_dims = [
-        [dim for dim in arg.dims if dim in known_core_dims]
-        if isinstance(arg, xr.DataArray)
-        else []
-        for arg in gocart_args
-    ]
-
-    result = xr.apply_ufunc(
-        dust_emission_gocart2g,
-        *gocart_args,
-        input_core_dims=input_core_dims,
+    return _apply_ufunc_wrapper(
+        func=dust_emission_gocart2g,
+        ds=ds,
+        known_core_dims={"lat", "lon", "bin"},
         output_core_dims=[["lat", "lon", "bin"]],
-        dask="parallelized",
-        output_dtypes=[float],
-        dask_gufunc_kwargs={"allow_rechunk": True},
+        history_message="Dust emissions calculated using the GOCART2G scheme.",
+        # Pass scalar arguments to the wrapper via kwargs
+        Ch_DU=Ch_DU,
+        grav=grav,
     )
-
-    result.attrs["history"] = history
-    return result
