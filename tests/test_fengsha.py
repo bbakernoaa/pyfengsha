@@ -2,7 +2,9 @@ import unittest
 import math
 import numpy as np
 import pyfengsha
-from numba import jit
+import pytest
+from numba import jit, vectorize
+from numpy.typing import NDArray
 from scipy.special import erf
 from pyfengsha.fengsha import (
     _calculate_drag_partition,
@@ -698,3 +700,62 @@ class TestCalculateDragPartition(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# --- Pytest-style test for refactored kok_aerosol_distribution ---
+
+# Re-create the original Numba ufunc implementation for direct comparison
+@vectorize("float64(float64, float64, float64)", nopython=True, cache=True)
+def _original_kok_ufunc(radius: float, r_low: float, r_up: float) -> float:
+    """Original Numba ufunc for Kok's aerosol distribution."""
+    median_mass_diameter = 3.4
+    geom_std_dev = 3.0
+    crack_prop_len = 12.0
+    factor = 1.0 / (np.sqrt(2.0) * np.log(geom_std_dev))
+    diameter = 2.0 * radius
+    dlam = diameter / crack_prop_len
+    erf_arg = factor * np.log(diameter / median_mass_diameter)
+    return (
+        diameter * (1.0 + math.erf(erf_arg)) * np.exp(-(dlam**3)) * np.log(r_up / r_low)
+    )
+
+
+def _original_kok_implementation(
+    radius: NDArray, r_low: NDArray, r_up: NDArray
+) -> NDArray:
+    """The original, Numba-based wrapper for Kok's distribution."""
+    distribution = _original_kok_ufunc(radius, r_low, r_up)
+    total_volume = np.sum(distribution)
+    if total_volume > 1.0e-15:
+        return distribution / total_volume
+    return np.zeros_like(distribution)
+
+
+@pytest.fixture
+def aerosol_bin_data():
+    """Provides sample aerosol bin data for testing."""
+    radius = np.array([0.1, 0.5, 1.0, 2.5, 5.0])
+    r_low = np.array([0.05, 0.45, 0.95, 2.45, 4.95])
+    r_up = np.array([0.15, 0.55, 1.05, 2.55, 5.05])
+    return radius, r_low, r_up
+
+
+def test_kok_aerosol_distribution_consistency(aerosol_bin_data):
+    """
+    Tests that the refactored SciPy/NumPy implementation of
+    kok_aerosol_distribution produces numerically identical results to the
+    original Numba-based version.
+    """
+    radius, r_low, r_up = aerosol_bin_data
+
+    # Calculate results from both versions
+    original_result = _original_kok_implementation(radius, r_low, r_up)
+    refactored_result = pyfengsha.kok_aerosol_distribution(radius, r_low, r_up)
+
+    # Assert that the results are the same within a tight tolerance
+    np.testing.assert_allclose(
+        original_result,
+        refactored_result,
+        rtol=1e-15,
+        atol=1e-15,
+        err_msg="Refactored kok_aerosol_distribution deviates from original implementation.",
+    )
