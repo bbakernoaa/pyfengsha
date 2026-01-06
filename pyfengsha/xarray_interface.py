@@ -63,9 +63,34 @@ def _apply_ufunc_wrapper(
                 f"Missing required argument for '{func.__name__}': {param.name}"
             )
 
-    # Dynamically generate input_core_dims by intersecting with known_core_dims
+    # Detect spatial dimensions from the first spatial DataArray in the dataset
+    spatial_dims = None
+    for var_name in ds.data_vars:
+        var = ds[var_name]
+        if isinstance(var, xr.DataArray) and len(var.dims) >= 2:
+            # Look for common spatial dimension patterns
+            dims = list(var.dims)
+            if any(d in ['lat', 'latitude'] for d in dims) and any(d in ['lon', 'longitude'] for d in dims):
+                spatial_dims = [d for d in dims if d in ['lat', 'latitude', 'lon', 'longitude']]
+                break
+
+    # If no spatial dims detected, fall back to using the known_core_dims
+    if spatial_dims is None:
+        spatial_dims = [d for d in known_core_dims if d in ['lat', 'latitude', 'lon', 'longitude']]
+
+    # Update output_core_dims to use detected spatial dimensions
+    if len(spatial_dims) >= 2:
+        # Assume spatial dims + bin dimension
+        if 'bin' in known_core_dims:
+            actual_output_dims = spatial_dims + ['bin']
+        else:
+            actual_output_dims = spatial_dims
+        output_core_dims = [actual_output_dims]
+
+    # Dynamically generate input_core_dims by intersecting with all core dims
+    all_core_dims = set(spatial_dims) | known_core_dims
     input_core_dims = [
-        [dim for dim in arg.dims if dim in known_core_dims]
+        [dim for dim in arg.dims if dim in all_core_dims]
         if isinstance(arg, xr.DataArray)
         else []
         for arg in func_args
@@ -177,8 +202,8 @@ def DustEmissionFENGSHA_xr(
     return _apply_ufunc_wrapper(
         func=dust_emission_fengsha,
         ds=ds,
-        known_core_dims={"lat", "lon", "bin"},
-        output_core_dims=[["lat", "lon", "bin"]],
+        known_core_dims={"lat", "lon", "latitude", "longitude", "bin"},
+        output_core_dims=[],  # Will be determined dynamically
         history_message=(
             f"Dust emissions calculated using the FENGSHA scheme (drag_opt={drag_opt})."
         ),
@@ -251,8 +276,8 @@ def DustEmissionGOCART2G_xr(ds: xr.Dataset, Ch_DU: float, grav: float) -> xr.Dat
     return _apply_ufunc_wrapper(
         func=dust_emission_gocart2g,
         ds=ds,
-        known_core_dims={"lat", "lon", "bin"},
-        output_core_dims=[["lat", "lon", "bin"]],
+        known_core_dims={"lat", "lon", "latitude", "longitude", "bin"},
+        output_core_dims=[],  # Will be determined dynamically
         history_message="Dust emissions calculated using the GOCART2G scheme.",
         # Pass scalar arguments to the wrapper via kwargs
         Ch_DU=Ch_DU,
