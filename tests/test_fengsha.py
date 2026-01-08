@@ -9,8 +9,44 @@ from scipy.special import erf
 from pyfengsha.fengsha import (
     _calculate_drag_partition,
     _darmenova_drag_partition_vectorized,
+    _gocart_moisture_correction_vectorized,
     _leung_drag_partition_vectorized,
 )
+
+
+# --- Test-local JIT implementation for comparison ---
+# These functions are copied from the original, pre-refactor implementation
+# to serve as a baseline for the vectorization test. They are kept here
+# so that the test's reference implementation can be JIT-compiled with Numba
+# without requiring the main library functions to remain JIT-compiled.
+WATER_DENSITY_GCM3: float = 1.0
+GOCART_PARTICLE_DENSITY_GCM3: float = 1.7
+FECAN_CLAY_COEFF_A: float = 14.0
+FECAN_CLAY_COEFF_B: float = 17.0
+
+
+@jit(nopython=True)
+def _test_gocart_vol_to_grav(vsoil: float, sandfrac: float) -> float:
+    """Test-local JIT version of gocart_vol_to_grav."""
+    vsat = 0.489 - 0.126 * sandfrac
+    return (
+        vsoil
+        * WATER_DENSITY_GCM3
+        * 1000.0
+        / (GOCART_PARTICLE_DENSITY_GCM3 * 1000.0 * (1.0 - vsat))
+    )
+
+
+@jit(nopython=True)
+def _test_gocart_moisture_correction(
+    slc: float, sand: float, clay: float, b: float
+) -> float:
+    """Test-local JIT version of gocart_moisture_correction."""
+    gravimetric_soil_moisture = _test_gocart_vol_to_grav(slc, sand) * 100.0
+    fecan_dry_limit_val = b * clay * (FECAN_CLAY_COEFF_A * clay + FECAN_CLAY_COEFF_B)
+    return np.sqrt(
+        1.0 + 1.21 * max(0.0, gravimetric_soil_moisture - fecan_dry_limit_val) ** 0.68
+    )
 
 
 # The original, loop-based implementation for comparison
@@ -93,7 +129,7 @@ def dust_emission_fengsha_original(
 
             rustar = R * ustar[i, j]
             smois = slc[i, j] * moist_correct
-            h = pyfengsha.gocart_moisture_correction(
+            h = _test_gocart_moisture_correction(
                 smois, sand[i, j], clay[i, j], drylimit_factor
             )
             u_thresh = uthrs[i, j] * h
@@ -758,4 +794,55 @@ def test_kok_aerosol_distribution_consistency(aerosol_bin_data):
         rtol=1e-15,
         atol=1e-15,
         err_msg="Refactored kok_aerosol_distribution deviates from original implementation.",
+    )
+
+
+def test_gocart_moisture_correction_vectorized_consistency():
+    """
+    Tests that the refactored vectorized GOCART moisture correction
+    produces results consistent with a pure NumPy implementation.
+    """
+    # --- Pure NumPy implementation for comparison ---
+    def _numpy_gocart_moisture_correction(slc, sand, clay, drylimit_factor):
+        # Constants from the main module
+        WATER_DENSITY_GCM3 = 1.0
+        GOCART_PARTICLE_DENSITY_GCM3 = 1.7
+        FECAN_CLAY_COEFF_A = 14.0
+        FECAN_CLAY_COEFF_B = 17.0
+
+        vsat = 0.489 - 0.126 * sand
+        grav_sm = (
+            slc
+            * WATER_DENSITY_GCM3
+            * 1000.0
+            / (GOCART_PARTICLE_DENSITY_GCM3 * 1000.0 * (1.0 - vsat))
+            * 100.0
+        )
+        dry_limit = drylimit_factor * clay * (FECAN_CLAY_COEFF_A * clay + FECAN_CLAY_COEFF_B)
+        correction_term = np.maximum(0.0, grav_sm - dry_limit)
+        return np.sqrt(1.0 + 1.21 * correction_term**0.68)
+
+    # --- Test Data Setup ---
+    np.random.seed(0)
+    n_pts = 50
+    slc = np.random.uniform(0.01, 0.5, n_pts)
+    sand = np.random.uniform(0.1, 0.8, n_pts)
+    clay = np.random.uniform(0.05, 0.4, n_pts)
+    drylimit_factor = 1.0
+
+    # --- Run both versions and compare ---
+    expected_result = _numpy_gocart_moisture_correction(
+        slc, sand, clay, drylimit_factor
+    )
+    actual_result = _gocart_moisture_correction_vectorized(
+        slc, sand, clay, drylimit_factor
+    )
+
+    # --- Verification ---
+    np.testing.assert_allclose(
+        expected_result,
+        actual_result,
+        rtol=1e-15,
+        atol=1e-15,
+        err_msg="Vectorized GOCART moisture correction deviates from pure NumPy implementation.",
     )

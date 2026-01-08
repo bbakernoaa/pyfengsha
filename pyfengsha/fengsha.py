@@ -78,7 +78,6 @@ def volumetric_to_gravimetric(vsoil: float, sandfrac: float) -> float:
     )
 
 
-@jit(nopython=True)
 def gocart_vol_to_grav(vsoil: float, sandfrac: float) -> float:
     """Convert volumetric soil moisture to gravimetric based on GOCART scheme.
 
@@ -158,7 +157,6 @@ def fecan_moisture_correction(
     return 1.0
 
 
-@jit(nopython=True)
 def gocart_moisture_correction(slc: float, sand: float, clay: float, b: float) -> float:
     """
     Calculates the GOCART version of the soil moisture correction factor.
@@ -581,6 +579,47 @@ def leung_drag_partition(Lc: float, lai: float, gvf: float, thresh: float) -> fl
     return feff if MIN_FEFF_L <= feff <= MAX_FEFF_L else MIN_FEFF_L
 
 
+def _gocart_moisture_correction_vectorized(
+    slc: NDArray, sand: NDArray, clay: NDArray, drylimit_factor: float
+) -> NDArray:
+    """
+    Vectorized calculation of the GOCART moisture correction factor (H).
+
+    Parameters
+    ----------
+    slc : NDArray
+        1D array of soil liquid content for valid cells.
+    sand : NDArray
+        1D array of sand fraction for valid cells.
+    clay : NDArray
+        1D array of clay fraction for valid cells.
+    drylimit_factor : float
+        Dry limit factor for moisture correction.
+
+    Returns
+    -------
+    NDArray
+        1D array of the moisture correction factor (H).
+    """
+    # Vectorized gocart_vol_to_grav
+    vsat = 0.489 - 0.126 * sand
+    gravimetric_soil_moisture = (
+        slc
+        * WATER_DENSITY_GCM3
+        * 1000.0
+        / (GOCART_PARTICLE_DENSITY_GCM3 * 1000.0 * (1.0 - vsat))
+        * 100.0
+    )
+
+    # Vectorized fecan_dry_limit
+    fecan_dry_limit_val = (
+        drylimit_factor * clay * (FECAN_CLAY_COEFF_A * clay + FECAN_CLAY_COEFF_B)
+    )
+
+    correction_term = np.maximum(0.0, gravimetric_soil_moisture - fecan_dry_limit_val)
+    return np.sqrt(1.0 + 1.21 * correction_term**0.68)
+
+
 def _darmenova_drag_partition_vectorized(rdrag: NDArray, vegfrac: NDArray) -> NDArray:
     """
     Vectorized implementation of the Darmenova drag partition scheme.
@@ -843,23 +882,11 @@ def dust_emission_fengsha(
     rustar = R * ustar[valid_mask]
 
     # --- Moisture Correction (Vectorized) ---
-    smois = slc[valid_mask] * moist_correct
+    smois_v = slc[valid_mask] * moist_correct
     sand_v = sand[valid_mask]
-    # Vectorized gocart_vol_to_grav
-    vsat = 0.489 - 0.126 * sand_v
-    gravimetric_soil_moisture = (
-        smois
-        * WATER_DENSITY_GCM3
-        * 1000.0
-        / (GOCART_PARTICLE_DENSITY_GCM3 * 1000.0 * (1.0 - vsat))
-        * 100.0
+    h = _gocart_moisture_correction_vectorized(
+        smois_v, sand_v, clay_v, drylimit_factor
     )
-    fecan_dry_limit_val = (
-        drylimit_factor * clay_v * (FECAN_CLAY_COEFF_A * clay_v + FECAN_CLAY_COEFF_B)
-    )
-
-    correction_term = np.maximum(0.0, gravimetric_soil_moisture - fecan_dry_limit_val)
-    h = np.sqrt(1.0 + 1.21 * correction_term**0.68)
 
     u_thresh = uthrs[valid_mask] * h
 
