@@ -759,3 +759,47 @@ def test_kok_aerosol_distribution_consistency(aerosol_bin_data):
         atol=1e-15,
         err_msg="Refactored kok_aerosol_distribution deviates from original implementation.",
     )
+
+
+def test_kok_aerosol_distribution_against_scipy(aerosol_bin_data):
+    """
+    Compares the Numba-vectorized kok_aerosol_distribution against the
+    original SciPy/NumPy implementation to ensure numerical equivalence.
+    """
+    from scipy import special
+
+    radius, r_low, r_up = aerosol_bin_data
+
+    # --- Original SciPy/NumPy implementation ---
+    def kok_aerosol_distribution_scipy(
+        radius: np.ndarray, r_low: np.ndarray, r_up: np.ndarray
+    ) -> np.ndarray:
+        median_mass_diameter = 3.4
+        geom_std_dev = 3.0
+        crack_prop_len = 12.0
+        factor = 1.0 / (np.sqrt(2.0) * np.log(geom_std_dev))
+        diameter = 2.0 * radius
+        dlam = diameter / crack_prop_len
+        erf_arg = factor * np.log(diameter / median_mass_diameter)
+        distribution = (
+            diameter
+            * (1.0 + special.erf(erf_arg))
+            * np.exp(-(dlam**3))
+            * np.log(r_up / r_low)
+        )
+        total_volume = np.sum(distribution)
+        if total_volume > 1.0e-15:
+            return distribution / total_volume
+        return np.zeros_like(distribution)
+
+    # --- Comparison ---
+    scipy_result = kok_aerosol_distribution_scipy(radius, r_low, r_up)
+    numba_result = pyfengsha.kok_aerosol_distribution(radius, r_low, r_up)
+
+    np.testing.assert_allclose(
+        scipy_result,
+        numba_result,
+        rtol=1e-15,
+        atol=1e-15,
+        err_msg="Numba implementation deviates from original SciPy version.",
+    )
