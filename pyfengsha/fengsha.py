@@ -2,10 +2,11 @@
 NOAA/ARL FENGSHA dust emission model and GOCART2G scheme implementations.
 """
 
+import math
+
 import numpy as np
-from numba import jit
+from numba import jit, vectorize
 from numpy.typing import NDArray
-from scipy import special
 
 # --- Constants ---
 # Using descriptive names for physical and model constants.
@@ -330,13 +331,52 @@ def mb95_drag_partition(z0: float) -> float:
     return 1.0 - np.log(z0 / z0s) / np.log(0.7 * (10.0 / z0s) ** 0.8)
 
 
+@vectorize(["float64(float64, float64, float64)"])
+def _kok_aerosol_distribution_ufunc(
+    radius: float, r_low: float, r_up: float
+) -> float:
+    """
+    Numba ufunc for element-wise Kok aerosol distribution calculation.
+
+    Parameters
+    ----------
+    radius : float
+        Particle radius for the bin [m].
+    r_low : float
+        Lower bound radius for the bin [m].
+    r_up : float
+        Upper bound radius for the bin [m].
+
+    Returns
+    -------
+    float
+        The un-normalized volume for the bin.
+    """
+    median_mass_diameter = 3.4
+    geom_std_dev = 3.0
+    crack_prop_len = 12.0
+    factor = 1.0 / (math.sqrt(2.0) * math.log(geom_std_dev))
+
+    diameter = 2.0 * radius
+    dlam = diameter / crack_prop_len
+
+    erf_arg = factor * math.log(diameter / median_mass_diameter)
+
+    return (
+        diameter
+        * (1.0 + math.erf(erf_arg))
+        * math.exp(-(dlam**3))
+        * math.log(r_up / r_low)
+    )
+
+
 def kok_aerosol_distribution(radius: NDArray, r_low: NDArray, r_up: NDArray) -> NDArray:
     """
-    Computes Kok's dust size aerosol distribution (Vectorized).
+    Computes Kok's dust size aerosol distribution (Numba-vectorized).
 
     This function calculates the volume distribution of aerosols across a set
-    of size bins based on Kok's model. The implementation is now a fully
-    vectorized SciPy/NumPy function.
+    of size bins based on Kok's model. The implementation uses a Numba
+    vectorized ufunc for high performance.
 
     Parameters
     ----------
@@ -357,25 +397,14 @@ def kok_aerosol_distribution(radius: NDArray, r_low: NDArray, r_up: NDArray) -> 
     >>> radius = np.array([0.1, 0.5, 1.0])
     >>> r_low = np.array([0.05, 0.45, 0.95])
     >>> r_up = np.array([0.15, 0.55, 1.05])
-    >>> kok_aerosol_distribution(radius, r_low, r_up)
-    array([0.16568854, 0.39523267, 0.43907879])
+    >>> result = kok_aerosol_distribution(radius, r_low, r_up)
+    >>> # The result should be close to the original SciPy implementation
+    >>> expected = np.array([0.16568854, 0.39523267, 0.43907879])
+    >>> np.allclose(result, expected)
+    True
     """
-    median_mass_diameter = 3.4
-    geom_std_dev = 3.0
-    crack_prop_len = 12.0
-    factor = 1.0 / (np.sqrt(2.0) * np.log(geom_std_dev))
-
-    diameter = 2.0 * radius
-    dlam = diameter / crack_prop_len
-
-    erf_arg = factor * np.log(diameter / median_mass_diameter)
-
-    distribution = (
-        diameter
-        * (1.0 + special.erf(erf_arg))
-        * np.exp(-(dlam**3))
-        * np.log(r_up / r_low)
-    )
+    # Call the high-performance Numba ufunc for the core calculation
+    distribution = _kok_aerosol_distribution_ufunc(radius, r_low, r_up)
 
     total_volume = np.sum(distribution)
 
