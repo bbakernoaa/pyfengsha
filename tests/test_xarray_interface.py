@@ -71,3 +71,52 @@ def test_dust_emission_fengsha_xr_smoke(sample_dataset):
     # Trigger computation and check for basic numeric validity
     computed_emissions = emissions.compute()
     assert not np.isnan(computed_emissions).all()
+
+
+def test_dust_emission_fengsha_xr_custom_dims(sample_dataset):
+    """
+    Tests the core_dims_mapping functionality.
+    Verifies that the wrapper can handle non-standard dimension names
+    and that the output dimensions match the original input dimensions.
+    """
+    # Rename dimensions to something non-standard
+    ds_custom = sample_dataset.rename(
+        {'lat': 'y', 'lon': 'x', 'bin': 'particle_size'}
+    )
+
+    # Define the mapping from the custom names to the internal names
+    mapping = {'y': 'lat', 'x': 'lon', 'particle_size': 'bin'}
+
+    # Run the FENGSHA model with the mapping
+    emissions = DustEmissionFENGSHA_xr(
+        ds=ds_custom.chunk({'y': 5, 'x': 10}),
+        alpha=1.0,
+        gamma=1.0,
+        kvhmax=2.0E-4,
+        grav=9.81,
+        drylimit_factor=1.0,
+        moist_correct=1.0,
+        drag_opt=1,
+        core_dims_mapping=mapping
+    )
+
+    # 1. The Proof (Validation)
+    # Check that the output dimensions are the original, custom names
+    assert emissions.dims == ('y', 'x', 'particle_size')
+
+    # Check coordinate preservation with custom names
+    xr.testing.assert_equal(emissions.coords['y'], ds_custom.coords['y'])
+    xr.testing.assert_equal(emissions.coords['x'], ds_custom.coords['x'])
+    xr.testing.assert_equal(
+        emissions.coords['particle_size'], ds_custom.coords['particle_size']
+    )
+
+    # Check shape
+    assert emissions.shape == (10, 20, 3)
+
+    # Check that it's still a dask array
+    assert hasattr(emissions.data, 'dask')
+
+    # Trigger computation and check for basic numeric validity
+    computed_emissions = emissions.compute()
+    assert not np.isnan(computed_emissions).all()
