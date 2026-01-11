@@ -741,6 +741,70 @@ def _calculate_drag_partition(
     return rdrag
 
 
+def _calculate_moisture_correction(
+    slc: NDArray,
+    sand: NDArray,
+    clay: NDArray,
+    moist_correct: float,
+    drylimit_factor: float,
+) -> NDArray:
+    """
+    Calculates the FENGSHA soil moisture correction factor (H) for valid cells.
+    This function is vectorized to operate efficiently on NumPy arrays.
+    Parameters
+    ----------
+    slc : NDArray
+        1D array of soil liquid content for valid cells.
+    sand : NDArray
+        1D array of sand fraction for valid cells [0-1].
+    clay : NDArray
+        1D array of clay fraction for valid cells [0-1].
+    moist_correct : float
+        Moisture correction factor.
+    drylimit_factor : float
+        Dry limit factor for moisture correction.
+    Returns
+    -------
+    NDArray
+        1D array of the soil moisture correction factor (H).
+    """
+    smois = slc * moist_correct
+    # Vectorized gocart_vol_to_grav
+    vsat = 0.489 - 0.126 * sand
+    gravimetric_soil_moisture = (
+        smois
+        * WATER_DENSITY_GCM3
+        * 1000.0
+        / (GOCART_PARTICLE_DENSITY_GCM3 * 1000.0 * (1.0 - vsat))
+        * 100.0
+    )
+    fecan_dry_limit_val = (
+        drylimit_factor * clay * (FECAN_CLAY_COEFF_A * clay + FECAN_CLAY_COEFF_B)
+    )
+
+    correction_term = np.maximum(0.0, gravimetric_soil_moisture - fecan_dry_limit_val)
+    return np.sqrt(1.0 + 1.21 * correction_term**0.68)
+
+
+def _calculate_horizontal_flux(rustar: NDArray, u_thresh: NDArray) -> NDArray:
+    """
+    Calculates the Horizontal Saltation Flux (Q) for valid cells.
+    This function is vectorized to operate efficiently on NumPy arrays.
+    Parameters
+    ----------
+    rustar : NDArray
+        1D array of the effective friction velocity for valid cells.
+    u_thresh : NDArray
+        1D array of the moisture-corrected threshold velocity for valid cells.
+    Returns
+    -------
+    NDArray
+        1D array of the horizontal saltation flux (Q).
+    """
+    u_sum = rustar + u_thresh
+    return np.maximum(0.0, rustar - u_thresh) * u_sum * u_sum
+
+
 def dust_emission_fengsha(
     fraclake: NDArray,
     fracsnow: NDArray,
@@ -872,40 +936,25 @@ def dust_emission_fengsha(
     rustar = R * ustar[valid_mask]
 
     # --- Moisture Correction (Vectorized) ---
-    smois = slc[valid_mask] * moist_correct
-    sand_v = sand[valid_mask]
-    # Vectorized gocart_vol_to_grav
-    vsat = 0.489 - 0.126 * sand_v
-    gravimetric_soil_moisture = (
-        smois
-        * WATER_DENSITY_GCM3
-        * 1000.0
-        / (GOCART_PARTICLE_DENSITY_GCM3 * 1000.0 * (1.0 - vsat))
-        * 100.0
+    h = _calculate_moisture_correction(
+        slc=slc[valid_mask],
+        sand=sand[valid_mask],
+        clay=clay_v,
+        moist_correct=moist_correct,
+        drylimit_factor=drylimit_factor,
     )
-    fecan_dry_limit_val = (
-        drylimit_factor * clay_v * (FECAN_CLAY_COEFF_A * clay_v + FECAN_CLAY_COEFF_B)
-    )
-
-    correction_term = np.maximum(0.0, gravimetric_soil_moisture - fecan_dry_limit_val)
-    h = np.sqrt(1.0 + 1.21 * correction_term**0.68)
-
     u_thresh = uthrs[valid_mask] * h
 
     # --- Horizontal Flux Calculation (Vectorized) ---
-    u_sum = rustar + u_thresh
-    q = np.maximum(0.0, rustar - u_thresh) * u_sum * u_sum
+    q = _calculate_horizontal_flux(rustar, u_thresh)
 
     # --- Final Emission Calculation and Broadcasting ---
     # Reshape for broadcasting: (n_valid,) -> (n_valid, 1)
     # distribution has shape (nbins,) -> (1, nbins)
     # Resulting shape after broadcasting: (n_valid, nbins)
-    final_emissions_v = (total_emissions * q)[:, np.newaxis] * distribution[
+    emissions[valid_mask] = (total_emissions * q)[:, np.newaxis] * distribution[
         np.newaxis, :
     ]
-
-    # Place the calculated values back into the full-sized emissions array
-    emissions[valid_mask] = final_emissions_v
 
     return emissions
 
