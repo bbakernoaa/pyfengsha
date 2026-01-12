@@ -645,6 +645,68 @@ class TestDragPartitionHelpers(unittest.TestCase):
         np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
 
 
+class TestFengshaRefactoredHelpers(unittest.TestCase):
+    def setUp(self):
+        """Set up common data for testing the refactored helper functions."""
+        self.n_pts = 10
+        np.random.seed(42)
+        self.slc = np.random.uniform(0.1, 0.4, self.n_pts)
+        self.sand = np.random.uniform(0.1, 0.8, self.n_pts)
+        self.clay = np.random.uniform(0.05, 0.3, self.n_pts)
+        self.uthrs = np.random.uniform(0.1, 0.3, self.n_pts)
+        self.rustar = np.random.uniform(0.05, 0.5, self.n_pts)
+        self.moist_correct = 1.0
+        self.drylimit_factor = 1.0
+
+    def test_calculate_moisture_correction(self):
+        """
+        Test the vectorized `_calculate_moisture_correction` against the
+        original scalar implementation.
+        """
+        from pyfengsha.fengsha import _calculate_moisture_correction
+
+        # Calculate expected values using the original scalar function
+        expected = np.array(
+            [
+                pyfengsha.gocart_moisture_correction(
+                    s, sand_val, clay_val, self.drylimit_factor
+                )
+                for s, sand_val, clay_val in zip(
+                    self.slc * self.moist_correct, self.sand, self.clay
+                )
+            ]
+        )
+
+        # Calculate actual values using the vectorized helper
+        actual = _calculate_moisture_correction(
+            self.slc,
+            self.sand,
+            self.clay,
+            self.moist_correct,
+            self.drylimit_factor,
+        )
+
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+    def test_calculate_horizontal_flux(self):
+        """
+        Test the vectorized `_calculate_horizontal_flux` against the
+        original scalar implementation.
+        """
+        from pyfengsha.fengsha import _calculate_horizontal_flux
+
+        # Calculate expected values using a loop with the scalar logic
+        expected = np.zeros(self.n_pts)
+        for i in range(self.n_pts):
+            u_sum = self.rustar[i] + self.uthrs[i]
+            expected[i] = max(0.0, self.rustar[i] - self.uthrs[i]) * u_sum * u_sum
+
+        # Calculate actual values using the vectorized helper
+        actual = _calculate_horizontal_flux(self.rustar, self.uthrs)
+
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+
 class TestCalculateDragPartition(unittest.TestCase):
     def setUp(self):
         """Set up common test data."""
@@ -701,7 +763,9 @@ class TestCalculateDragPartition(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
+
 # --- Pytest-style test for refactored kok_aerosol_distribution ---
+
 
 # Re-create the original Numba ufunc implementation for direct comparison
 @vectorize("float64(float64, float64, float64)", nopython=True, cache=True)
